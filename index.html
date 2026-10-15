@@ -1,9 +1,9 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BreakerOps | Tell us what to keep track of. We remind you.</title>
-<meta name="description" content="Tell us what to keep track of. We remind you. Licenses, taxes, certifications, overtime, anything with a date. No login, no app.">
+<meta name="description" content="Tell us what to keep track of. We remind you. Anything with a date. No login, no app.">
 <link rel="canonical" href="https://www.breakerops.com/">
-<meta property="og:title" content="BreakerOps | Tell us what to keep track of. We remind you."><meta property="og:description" content="Tell us what to keep track of. We remind you. Licenses, taxes, certifications, overtime, anything with a date. No login, no app."><meta property="og:type" content="website"><meta property="og:url" content="https://www.breakerops.com/"><meta property="og:site_name" content="BreakerOps">
+<meta property="og:title" content="BreakerOps | Tell us what to keep track of. We remind you."><meta property="og:description" content="Tell us what to keep track of. We remind you. Anything with a date. No login, no app."><meta property="og:type" content="website"><meta property="og:url" content="https://www.breakerops.com/"><meta property="og:site_name" content="BreakerOps">
 <meta property="og:image" content="https://www.breakerops.com/assets/img/1-preview-keep-track.png"><meta name="twitter:card" content="summary_large_image">
 <meta name="theme-color" content="#111111">
 <link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="32x32">
@@ -24,18 +24,18 @@ textarea{min-height:130px;resize:vertical}input[type=email]{margin-top:12px}
 .chips{display:flex;flex-wrap:wrap;gap:10px;padding:0;list-style:none}.chips li{border:2px solid #111;border-radius:999px;padding:6px 16px;font-size:16px}
 .sg{margin:0 0 12px;font-size:15px;color:#444}.tags{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.tags button{font:inherit;font-size:15px;background:#fff;color:#111;border:2px solid #111;border-radius:999px;padding:6px 14px;cursor:pointer}.tags button:hover,.tags button:focus-visible{background:#111;color:#fff;outline:none}
 @media(max-width:480px){.tags{gap:6px}.tags button{font-size:14px;padding:5px 11px}}
-.row{display:flex;gap:10px}.row input{flex:1;min-width:0;margin:0}.tags button[aria-pressed=true]{background:#111;color:#fff}@media(max-width:480px){.row{flex-direction:column}.row .btn{width:100%}}
+.row{display:flex;gap:10px}.row input{flex:1;min-width:0;margin:0}.tags button[aria-pressed=true]{background:#111;color:#fff}
 footer{margin:70px 0 40px;font-size:14px;color:#444;border-top:1px solid #ccc;padding-top:18px}
 .hp{position:absolute;left:-9999px}
 h1{margin:14px 0 10px}.sub{font-size:18px;margin:0 0 16px}header{padding:14px 0}.sg{margin:0 0 8px}.tags{margin:0 0 16px}.fine{margin:8px 0 10px}footer{margin:22px 0 16px;padding-top:12px}.ok{margin:10px 0}
-@media(max-width:480px){h1{font-size:31px}.sub{font-size:16px}body{font-size:16px}.btn{padding:12px 20px}input[type=email]{padding:12px}}
+@media(max-width:480px){h1{font-size:28px;margin:8px 0 8px}.tags button{font-size:13px;padding:4px 10px}.row .btn{padding:10px 14px;white-space:nowrap}.fine{font-size:13px}footer{font-size:12px;margin-top:14px}.sub{font-size:16px}body{font-size:16px}.btn{padding:12px 20px}input[type=email]{padding:12px}}
 </style></head><body>
 <header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><nav><a href="/how-it-works.html">How it works</a><a class="btn" style="padding:8px 16px;margin-left:20px;font-size:15px;color:#fff" href="/#start">Start</a></nav></div></header>
 <main id="main"><div class="wrap">
 <h1>Tell us what to keep track of. We remind you.</h1>
-<p class="sub">Licenses, taxes, certifications, overtime, anything with a date. No login, no app.</p>
-<p class="sg" id="sg">Things we can keep track of. Tap any that fit.</p>
-<div class="tags" role="group" aria-labelledby="sg"><button type="button" aria-pressed="false">License renewals</button><button type="button" aria-pressed="false">Estimated tax dates</button><button type="button" aria-pressed="false">Overtime watch</button><button type="button" aria-pressed="false">Certification expirations</button><button type="button" aria-pressed="false">Insurance renewals</button><button type="button" aria-pressed="false">Vehicle registration</button><button type="button" aria-pressed="false">Lease and contract renewals</button><button type="button" aria-pressed="false">Birthdays and anniversaries</button></div>
+<p class="sub">Anything with a date. No login, no app.</p>
+<p class="sg" id="sg">Tap what you need tracked.</p>
+<div class="tags" role="group" aria-labelledby="sg"><button type="button" aria-pressed="false">License renewals</button><button type="button" aria-pressed="false">Estimated tax dates</button><button type="button" aria-pressed="false">Overtime watch</button><button type="button" aria-pressed="false">Certification expirations</button><button type="button" aria-pressed="false">Insurance renewals</button><button type="button" aria-pressed="false">Vehicle registration</button></div>
 <div id="start">
 <form id="f" novalidate>
 <div class="row"><input type="email" id="em" aria-label="Your email" placeholder="Your email" autocomplete="email"><button class="btn" type="submit" id="go">Get started</button></div>
@@ -45,7 +45,7 @@ h1{margin:14px 0 10px}.sub{font-size:18px;margin:0 0 16px}header{padding:14px 0}
 </form>
 <p id="done" class="ok" hidden>Got it. We will write to <span id="to"></span> to get you set up. Nothing starts until you say yes.</p>
 </div>
-<p class="fine" style="margin-top:26px;font-size:16px;color:#111"><b>Your information stays yours.</b> We use it only to keep track of what you ask and to remind you. We never sell it, and we never use it for our own benefit.</p>
+<p class="fine" style="margin-top:26px;font-size:16px;color:#111"><b>Your information stays yours.</b> We use it only to remind you. We never sell it or use it for our own benefit.</p>
 </div></main>
 <footer><div class="wrap">BreakerOps, 3800 Silver Lake Rd NE, St Anthony, MN 55421. <a href="mailto:matt@breakerops.com">matt@breakerops.com</a><br>We keep records and send reminders. We do not give legal, tax or payroll advice.</div></footer>
 <script>
