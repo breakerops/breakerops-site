@@ -22,6 +22,7 @@ textarea{min-height:130px;resize:vertical}input[type=email]{margin-top:12px}
 .steps{list-style:none;padding:0;margin:44px 0 0;border-top:2px solid #111}
 .steps li{padding:16px 0;border-bottom:1px solid #ccc;display:flex;gap:16px}.steps b{min-width:26px}
 .chips{display:flex;flex-wrap:wrap;gap:10px;padding:0;list-style:none}.chips li{border:2px solid #111;border-radius:999px;padding:6px 16px;font-size:16px}
+.sg{margin:0 0 12px;font-size:15px;color:#444}.tags{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.tags button{font:inherit;font-size:15px;background:#fff;color:#111;border:2px solid #111;border-radius:999px;padding:6px 14px;cursor:pointer}.tags button:hover,.tags button:focus-visible{background:#111;color:#fff;outline:none}
 footer{margin:70px 0 40px;font-size:14px;color:#444;border-top:1px solid #ccc;padding-top:18px}
 .hp{position:absolute;left:-9999px}
 </style></head><body>
@@ -31,6 +32,8 @@ footer{margin:70px 0 40px;font-size:14px;color:#444;border-top:1px solid #ccc;pa
 <p class="sub">Licenses, taxes, certifications, overtime, birthdays, anything with a date. Say it in plain words. No login, no app.</p>
 <div id="start">
 <form id="f" novalidate>
+<p class="sg" id="sg">Not sure where to start? Tap anything that applies. Add as many as you like.</p>
+<div class="tags" role="group" aria-labelledby="sg"><button type="button" data-t="My trade license expires ">My trade license expires...</button><button type="button" data-t="Quarterly estimated tax is due ">Quarterly estimated tax is due...</button><button type="button" data-t="Warn me when anyone passes 38 hours ">Warn me when anyone passes 38 hours...</button><button type="button" data-t="A forklift cert expires ">A forklift cert expires...</button><button type="button" data-t="Insurance renews ">Insurance renews...</button><button type="button" data-t="Truck registration is due ">Truck registration is due...</button><button type="button" data-t="A permit or inspection is due ">A permit or inspection is due...</button><button type="button" data-t="A lease or contract renews ">A lease or contract renews...</button><button type="button" data-t="Equipment service is due ">Equipment service is due...</button><button type="button" data-t="A bond or filing is due ">A bond or filing is due...</button><button type="button" data-t="A birthday or anniversary is ">A birthday or anniversary is...</button></div>
 <textarea id="msg" aria-label="What should we keep track of?" placeholder=""></textarea>
 <input type="email" id="em" aria-label="Your email" placeholder="Your email, so we can write back" autocomplete="email">
 <input type="text" id="hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
@@ -49,6 +52,8 @@ footer{margin:70px 0 40px;font-size:14px;color:#444;border-top:1px solid #ccc;pa
 var ex=['My electrical license expires March 3. Remind me 30 days before.','Quarterly estimated tax is due the 15th. Warn me a week ahead.','Tell me when anyone is close to 38 hours in a week.','Sam\'s forklift cert expires in June.','Insurance renews every October 1.'];
 var m=document.getElementById('msg'),i=0;
 function r(){if(document.activeElement!==m&&!m.value){m.placeholder='e.g. '+ex[i++%ex.length];}}
+var tg=document.querySelectorAll('.tags button');
+for(var k=0;k<tg.length;k++)tg[k].addEventListener('click',function(){var v=m.value;m.value=(v&&!/\n$/.test(v)?v+'\n':v)+this.getAttribute('data-t');m.focus();m.setSelectionRange(m.value.length,m.value.length);});
 r();setInterval(r,3500);
 var f=document.getElementById('f'),st=document.getElementById('st'),go=document.getElementById('go');
 f.addEventListener('submit',function(e){e.preventDefault();
