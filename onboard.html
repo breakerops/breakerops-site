@@ -71,17 +71,177 @@
     <div class="page-head">
       <div class="wrap">
         <h1>Get Started</h1>
-        <p class="intro">Tell us what you want us to keep track of: license dates, tax dates, certifications, overtime limits, birthdays, or anything else. It takes about five minutes. There is no login.</p>
+        <p class="intro">Tell us what you want us to keep track of. Check the boxes that apply, add what you know, and add anything of your own. It takes about five minutes. There is no login.</p>
       </div>
     </div>
     <section class="section section--after-head">
       <div class="wrap ob">
-        <p><a class="btn" href="https://docs.google.com/forms/d/e/1FAIpQLSfHZjA0qHR1B8WmMEA3Fp_MT0Umdr-8PV50KDZ50azri_j0iA/viewform" rel="noopener">Open the onboarding form</a></p>
-        <p class="note"><strong>How this works:</strong> fill in what you know, skip the rest. We write back what we recorded and you confirm it. Nothing is tracked until you do.</p>
-        <p class="note"><strong>Do not send passwords, Social Security numbers, bank details or birth years.</strong> We do not need them. Texts are not switched on yet, so alerts go by email for now.</p>
-        <p>Prefer email? Write to <a href="mailto:nick@breakerops.com">nick@breakerops.com</a>.</p>
+        <p class="note"><strong>How this works:</strong> fill in what you know and skip the rest. When you press Send, it goes to our inbox. We write back what we recorded and you confirm it. Nothing is tracked and no alerts go out until you confirm.</p>
+        <p class="note"><strong>Do not send passwords, Social Security numbers or bank details.</strong> We do not need them.</p>
+        <form id="ob" autocomplete="off" novalidate>
+          <h2>About you</h2>
+          <label for="name">Your name</label><input type="text" id="name">
+          <label for="biz">Business name</label><input type="text" id="biz">
+          <label for="email">Email for alerts</label><input type="email" id="email">
+          <label for="phone">Mobile number for text alerts (optional)</label><input type="tel" id="phone">
+          <label for="tz">Your time zone</label>
+          <select id="tz"><option>Central</option><option>Eastern</option><option>Mountain</option><option>Pacific</option><option>Other (say which)</option></select>
+
+          <h2>How you want to hear from us</h2>
+          <label for="chan">Alerts by</label>
+          <select id="chan"><option>Email</option><option>Text</option><option>Both</option></select>
+          <p class="hint">Texting customers is not switched on yet. For now alerts come by email, and we will tell you when text is ready.</p>
+          <label for="cad">How often</label>
+          <select id="cad"><option>Only when something is due</option><option>Weekly summary plus when something is due</option><option>Daily summary plus when something is due</option></select>
+          <label>How far ahead should we warn you? (check any)</label>
+          <div class="row">
+            <label class="opt"><input type="checkbox" class="lead" value="60 days"> 60 days</label>
+            <label class="opt"><input type="checkbox" class="lead" value="30 days" checked> 30 days</label>
+            <label class="opt"><input type="checkbox" class="lead" value="14 days"> 14 days</label>
+            <label class="opt"><input type="checkbox" class="lead" value="7 days" checked> 7 days</label>
+            <label class="opt"><input type="checkbox" class="lead" value="1 day" checked> 1 day</label>
+          </div>
+
+          <h2>What to keep track of</h2>
+      <div class="field" data-key="tax" data-title="Tax filing/payment dates">
+        <h3>Tax filing/payment dates</h3>
+        <p class="hint">Federal, state, sales tax, quarterly estimates, extensions. Date and what it is for.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_tax">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_tax" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="bday" data-title="Employee birthdays (month/day only)">
+        <h3>Employee birthdays (month/day only)</h3>
+        <p class="hint">Name and month and day only. Please do not send birth years.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_bday">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_bday" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="ot" data-title="OT warning thresholds (workweek start + hours source)">
+        <h3>OT warning thresholds (workweek start + hours source)</h3>
+        <p class="hint">Which day your workweek starts, the weekly hours that should trigger a warning, and where we will get the hours (you tell us, or a weekly list you send).</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_ot">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_ot" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="bizlic" data-title="Business/trade license expirations">
+        <h3>Business/trade license expirations</h3>
+        <p class="hint">Contractor, electrical, plumbing or other trade licenses. License name and expiration date.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_bizlic">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_bizlic" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="cert" data-title="Worker certification/training expirations">
+        <h3>Worker certification/training expirations</h3>
+        <p class="hint">Who, which certification or training, expiration date. OSHA cards, CE hours, safety training.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_cert">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_cert" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="ins" data-title="Insurance renewals">
+        <h3>Insurance renewals</h3>
+        <p class="hint">General liability, workers' comp, auto, bonds, certificates of insurance. Policy and renewal date.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_ins">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_ins" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="veh" data-title="Vehicle registration/inspection">
+        <h3>Vehicle registration/inspection</h3>
+        <p class="hint">Truck name or plate, what is due, due date.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_veh">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_veh" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="equip" data-title="Equipment inspections/service">
+        <h3>Equipment inspections/service</h3>
+        <p class="hint">Lifts, meters, calibration, ladders, tool testing. Item and next due date.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_equip">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_equip" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="permit" data-title="Permit renewals/deadlines">
+        <h3>Permit renewals/deadlines</h3>
+        <p class="hint">Permit, jurisdiction, renewal or inspection deadline.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_permit">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_permit" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+      <div class="field" data-key="payroll" data-title="Payroll submission/pay dates">
+        <h3>Payroll submission/pay dates</h3>
+        <p class="hint">Payroll cutoff days, pay days, payroll tax deposit dates.</p>
+        <label class="check"><input type="checkbox" class="trk"> Track this for me</label>
+        <label for="d_payroll">Details: what, who or which one, the date or limit, and how often it repeats</label>
+        <textarea id="d_payroll" class="det" placeholder="Example: April 15 and June 15, federal estimated tax, repeats every year"></textarea>
+      </div>
+
+          <h2>Anything else</h2>
+          <p class="hint">Add your own. Give each one a name, then what and when.</p>
+          <div id="custom"></div>
+          <p><button type="button" class="btn" id="addc">Add another item</button></p>
+
+          <h2>Send it</h2>
+          <label class="opt"><input type="checkbox" id="consent"> I agree BreakerOps may email me (and text me once texts are on) about the items above. I understand nothing is tracked until I confirm what you write back.</label>
+          <input type="text" id="hp" tabindex="-1" autocomplete="off" style="position:absolute;left:-9999px" aria-hidden="true">
+          <p><button type="button" class="btn" id="send">Send</button></p>
+          <p id="msg" class="note" role="status"></p>
+          <p id="fb" hidden class="note">If that did not go through, <a id="fbl" href="#">open an email instead</a> or write to nick@breakerops.com.</p>
+        </form>
       </div>
     </section>
+    <script>
+    (function(){
+      var cust=document.getElementById('custom'), n=0;
+      function addc(){n++;var d=document.createElement('div');d.className='field cf';
+        d.innerHTML='<label>Name of this item</label><input type="text" class="cn"><label>What and when</label><textarea class="cd"></textarea>';cust.appendChild(d);}
+      addc();
+      document.getElementById('addc').onclick=addc;
+      function v(id){return (document.getElementById(id).value||'').trim();}
+      function build(){
+        var L=[];
+        L.push('BreakerOps onboarding');
+        L.push('Name: '+v('name'));L.push('Business: '+v('biz'));L.push('Email: '+v('email'));
+        L.push('Mobile: '+(v('phone')||'(none)'));L.push('Time zone: '+v('tz'));
+        L.push('Alerts by: '+v('chan'));L.push('How often: '+v('cad'));
+        var lead=[].map.call(document.querySelectorAll('.lead:checked'),function(x){return x.value;});
+        L.push('Warn me ahead: '+(lead.join(', ')||'(not chosen)'));
+        L.push('');L.push('TRACK THESE');
+        var any=0;
+        [].forEach.call(document.querySelectorAll('.field[data-key]'),function(f){
+          var on=f.querySelector('.trk').checked, det=f.querySelector('.det').value.trim();
+          if(on||det){any++;L.push('- '+f.getAttribute('data-title')+': '+(det||'(tell us more when you reply)'));}
+        });
+        [].forEach.call(document.querySelectorAll('.cf'),function(f){
+          var nm=f.querySelector('.cn').value.trim(), d=f.querySelector('.cd').value.trim();
+          if(nm||d){any++;L.push('- CUSTOM '+(nm||'(unnamed)')+': '+(d||'(tell us more when you reply)'));}
+        });
+        if(!any)L.push('(nothing selected yet)');
+        L.push('');L.push('Sent from breakerops.com/onboard.html');
+        return {text:L.join('\r\n'),any:any};
+      }
+      function check(){
+        var m=document.getElementById('msg');
+        if(!v('name')||!v('email')){m.textContent='Please add your name and email so we can write back.';return null;}
+        var b=build();
+        if(!b.any){m.textContent='Check at least one item or add your own.';return null;}
+        m.textContent='';return b;
+      }
+      document.getElementById('send').onclick=function(){
+        var m=document.getElementById('msg'),btn=this;
+        if(document.getElementById('hp').value){return;}
+        var b=check();if(!b)return;
+        if(!document.getElementById('consent').checked){m.textContent='Please tick the agreement box so we can write back.';return;}
+        var subj='BreakerOps onboarding: '+(v('biz')||v('name'));
+        var fb=document.getElementById('fbl');fb.href='mailto:nick@breakerops.com?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(b.text);
+        btn.disabled=true;m.textContent='Sending...';
+        fetch('https://formsubmit.co/ajax/nick@breakerops.com',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+          body:JSON.stringify({_subject:subj,_template:'box',_captcha:'false',_honey:'',name:v('name'),email:v('email'),business:v('biz'),message:b.text})})
+        .then(function(r){return r.json();}).then(function(j){
+          if(j&&(j.success===true||j.success==='true')){m.textContent='Sent. We will write back to '+v('email')+' with what we recorded. Nothing is tracked until you confirm.';document.getElementById('fb').hidden=true;}
+          else{throw new Error('no');}
+        }).catch(function(){btn.disabled=false;m.textContent='That did not go through.';document.getElementById('fb').hidden=false;});
+      };
+    })();
+    </script>
   </main>
 
   <footer class="site-footer">
