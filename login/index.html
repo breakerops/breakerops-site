@@ -27,6 +27,6 @@ document.getElementById('f').addEventListener('submit',function(e){e.preventDefa
 document.getElementById('fg').addEventListener('click',function(e){e.preventDefault();
  if(!em.value.trim()){m.className='msg';m.textContent='Enter your email above first.';return;}
  var a=em.value.trim();m.className='msg';m.textContent='Sending...';
- sb.auth.resetPasswordForEmail(a,{redirectTo:'https://www.breakerops.com/app/'}).then(function(){m.className='msg ok';m.textContent='Check your email. If '+a+' has an account, a link to set a new password is on its way. It can take a minute.';document.getElementById('fgp').textContent='Reset link sent.';m.scrollIntoView({block:'center'});});
+ sb.auth.resetPasswordForEmail(a,{redirectTo:'https://www.breakerops.com/reset/'}).then(function(){m.className='msg ok';m.textContent='Check your email. If '+a+' has an account, a link to set a new password is on its way. It can take a minute.';document.getElementById('fgp').textContent='Reset link sent.';m.scrollIntoView({block:'center'});});
 });
 </script></body></html>
