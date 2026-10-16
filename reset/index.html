@@ -1,0 +1,33 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Set a new password | BreakerOps</title><meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><meta name="theme-color" content="#111111">
+<style>*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}a{color:#111}.wrap{max-width:720px;margin:0 auto;padding:0 22px}header{padding:20px 0}.hi{display:flex;justify-content:space-between;align-items:center}.brand{font-weight:800;letter-spacing:-.02em;text-decoration:none;font-size:20px}.brand span{font-weight:400}.btn{display:inline-block;background:#111;color:#fff;border:2px solid #111;border-radius:10px;padding:12px 22px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}.btn:hover{background:#fff;color:#111}.btn.s{background:#fff;color:#111;padding:6px 14px;font-size:15px}.btn.s:hover{background:#111;color:#fff}.btn[disabled]{opacity:.45;cursor:default}.btn[disabled]:hover{background:#fff;color:#111}input{width:100%;font:inherit;padding:12px;border:2px solid #111;border-radius:10px;background:#fff;color:#111;margin:6px 0 14px}label{font-size:15px;font-weight:600}h1{font-size:30px;letter-spacing:-.02em;margin:20px 0 14px}h2{font-size:20px;margin:34px 0 8px}.fine{font-size:14px;color:#444}.msg{min-height:22px;font-size:15px}.msg.ok{display:block;border:2px solid #111;border-radius:10px;padding:14px;font-size:18px;font-weight:700;margin:14px 0}</style></head><body>
+<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a></div></header>
+<main><div class="wrap" style="max-width:420px">
+<h1>Choose a new password</h1>
+<form id="f" style="display:none"><label for="p1">New password</label><input id="p1" type="password" autocomplete="new-password" minlength="10" required>
+<label for="p2">Type it again</label><input id="p2" type="password" autocomplete="new-password" minlength="10" required>
+<button class="btn" id="go" type="submit">Save password</button>
+<p class="fine">At least 10 characters.</p></form>
+<p class="msg" id="m" role="status">Checking your link...</p>
+<p class="fine" id="bad" style="display:none"><a href="/login/">Back to log in</a> and use "Forgot password" to get a new link.</p>
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
+var m=document.getElementById('m'),f=document.getElementById('f'),ready=false;
+function show(){ready=true;f.style.display='block';m.textContent='';}
+function fail(t){m.className='msg ok';m.textContent=t||'This link has expired or was already used.';document.getElementById('bad').style.display='block';}
+sb.auth.onAuthStateChange(function(ev){if(ev==='PASSWORD_RECOVERY')show();});
+setTimeout(function(){if(!ready)fail();},4000);
+f.addEventListener('submit',function(e){e.preventDefault();
+ var a=document.getElementById('p1').value,b=document.getElementById('p2').value;
+ if(a.length<10){m.textContent='Use at least 10 characters.';return;}
+ if(a!==b){m.textContent='The two passwords do not match.';return;}
+ m.textContent='Saving...';
+ sb.auth.updateUser({password:a}).then(function(r){
+  if(r.error){m.className='msg ok';m.textContent=r.error.message||'That did not work. Try again.';return;}
+  m.className='msg ok';m.textContent='Password saved. Taking you in...';setTimeout(function(){location.replace('/app/');},1200);});
+});
+</script></body></html>
