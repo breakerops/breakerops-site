@@ -80,11 +80,11 @@ function route(){var p=location.hash.replace('#','');$('cal').hidden=!!p&&['logs
  $('cal').style.display='none';pg.hidden=false;
  if(p==='logs')logs();else if(p==='users')users();else profile();}
 function logs(){var pg=$('pg');pg.innerHTML='<h1>Information logs</h1><p class="fine">What we know about your business, from what you have told us. Tell us something new and we add it here.</p><div id="lg"><p class="fine">Loading...</p></div>';
- sb.from('info_notes').select('id,title,body,updated_at').order('updated_at',{ascending:false}).then(function(q){var l=(q.data||[]);
+ sb.from('info_notes').select('id,title,body,status,updated_at').order('updated_at',{ascending:false}).then(function(q){var l=(q.data||[]);
   $('lg').innerHTML=(q.error||!l.length)?'<p>Nothing here yet. We add what you tell us about your business as we go.</p>':l.map(function(x){return '<div class="note"><b>'+esc(x.title)+'</b><div>'+esc(x.body).replace(/\n/g,'<br>')+'</div><small>Updated '+esc((x.updated_at||'').slice(0,10))+'</small></div>';}).join('');});}
 function users(){var pg=$('pg');pg.innerHTML='<h1>Add users</h1><div class="price"><b>First account: $80</b><br><b>Each additional user: $60</b></div><p class="fine">Add a teammate who should see this calendar and your information logs. Enter their email and we will set them up and confirm with you.</p><label for="ie">Their email</label><input id="ie" type="email" autocomplete="off"><button class="btn" id="ib">Request invite</button><p class="msg" id="im"></p>';
  $('ib').onclick=function(){var v=$('ie').value.trim();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){$('im').className='msg bad';$('im').textContent='Enter a valid email address.';return;}
-  $('ib').disabled=true;sb.from('user_invites').insert({email:v}).then(function(q){$('ib').disabled=false;
+  $('ib').disabled=true;sb.from('business_members').select('business_id').limit(1).then(function(m){var b=m.data&&m.data[0];if(!b){return {error:true};}return sb.from('user_invites').insert({email:v,business_id:b.business_id});}).then(function(q){$('ib').disabled=false;
    if(q.error){$('im').className='msg bad';$('im').innerHTML='We could not save this request. Email us at <a href="mailto:matt@breakerops.com">matt@breakerops.com</a> and we will add them.';}
    else{$('im').className='msg ok';$('im').textContent='Request received. We will confirm with you before adding anyone.';$('ie').value='';}});};}
 function profile(){var pg=$('pg'),n=(user.user_metadata&&user.user_metadata.full_name)||'';
