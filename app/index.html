@@ -18,18 +18,23 @@
 .grid.m{grid-template-rows:auto repeat(6,minmax(0,1fr))}.grid.w{grid-template-rows:auto minmax(0,1fr)}
 .dl{flex:1;overflow:auto}.today{outline:2px solid #111;outline-offset:-2px}
 #empty{margin:6px 0 0;font-size:13px}
+.menu.mm button,#mm button{display:block;width:100%;text-align:left;font:inherit;font-size:16px;background:#fff;color:#111;border:0;border-bottom:1px solid #ccc;padding:11px 2px;cursor:pointer}#mm button:last-child{border-bottom:0;font-weight:700}#mm{width:min(240px,80vw)}
+.pg{flex:1;min-height:0;overflow:auto}.pg h1{font-size:24px;margin:6px 0 10px}.pg .note{border-top:2px solid #111;padding:12px 0;border-bottom:1px solid #ccc}.pg .note small{color:#444;display:block}
+.pg input{margin:4px 0 12px}.pg .ok{font-weight:700}.pg .bad{color:#b00020;font-weight:700}.pg .price{border:2px solid #111;border-radius:10px;padding:12px 14px;margin:0 0 14px}
 </style></head><body><div class="app">
-<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><div class="hr"><button class="btn s" id="cb" aria-expanded="false">Connect</button><button class="btn s" id="out">Sign out</button>
+<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><div class="hr"><button class="btn s" id="cb" aria-expanded="false">Connect</button><button class="btn s" id="mb" aria-expanded="false">Menu</button>
+<div class="menu" id="mm" hidden><button data-go="">Calendar</button><button data-go="logs">Information logs</button><button data-go="users">Add users</button><button data-go="profile">Profile</button><button id="out">Sign out</button></div>
 <div class="menu" id="mn" hidden><p class="who" id="who"></p><ul class="int">
 <li><span>Google Calendar<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
 <li><span>Outlook<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
 <li><span>Slack<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
 </ul><p class="fine">Optional. We only read what you allow, and you can disconnect any time.</p></div></div></div></header>
 <main><div class="wrap">
-<div class="bar"><div class="seg" id="sg"><button data-v="m" aria-pressed="true">Month</button><button data-v="w" aria-pressed="false">Week</button><button data-v="d" aria-pressed="false">Day</button></div></div>
+<div id="cal" style="flex:1;min-height:0;display:flex;flex-direction:column"><div class="bar"><div class="seg" id="sg"><button data-v="m" aria-pressed="true">Month</button><button data-v="w" aria-pressed="false">Week</button><button data-v="d" aria-pressed="false">Day</button></div></div>
 <div class="nav"><button id="pv" aria-label="Previous">&lt;</button><b id="mt"></b><button id="nx" aria-label="Next">&gt;</button></div>
 <div id="cv"></div>
-<p class="fine" id="empty" hidden>Nothing here yet. We add items as we set things up with you.</p>
+<p class="fine" id="empty" hidden>Nothing here yet. We add items as we set things up with you.</p></div>
+<div class="pg" id="pg" hidden></div>
 </div></main></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -66,12 +71,35 @@ function render(){
 function step(n){if(vw==='m'){cur.setDate(1);cur.setMonth(cur.getMonth()+n);}else if(vw==='w')cur.setDate(cur.getDate()+7*n);else cur.setDate(cur.getDate()+n);render();}
 $('pv').onclick=function(){step(-1);};$('nx').onclick=function(){step(1);};
 Array.prototype.forEach.call($('sg').children,function(b){b.onclick=function(){vw=b.dataset.v;Array.prototype.forEach.call($('sg').children,function(o){o.setAttribute('aria-pressed',o===b);});render();};});
-$('cb').onclick=function(e){e.stopPropagation();var h=$('mn').hidden;$('mn').hidden=!h;$('cb').setAttribute('aria-expanded',h);};
-document.addEventListener('click',function(e){if(!$('mn').contains(e.target))$('mn').hidden=true;});
+$('cb').onclick=function(e){e.stopPropagation();$('mm').hidden=true;var h=$('mn').hidden;$('mn').hidden=!h;$('cb').setAttribute('aria-expanded',h);};
+document.addEventListener('click',function(e){if(!$('mn').contains(e.target))$('mn').hidden=true;if(!$('mm').contains(e.target))$('mm').hidden=true;});
+var user=null;
+function go(p){$('mm').hidden=true;location.hash=p;}
+function route(){var p=location.hash.replace('#','');$('cal').hidden=!!p&&['logs','users','profile'].indexOf(p)>=0;var pg=$('pg');
+ if(['logs','users','profile'].indexOf(p)<0){pg.hidden=true;$('cal').hidden=false;$('cal').style.display='flex';return;}
+ $('cal').style.display='none';pg.hidden=false;
+ if(p==='logs')logs();else if(p==='users')users();else profile();}
+function logs(){var pg=$('pg');pg.innerHTML='<h1>Information logs</h1><p class="fine">What we know about your business, from what you have told us. Tell us something new and we add it here.</p><div id="lg"><p class="fine">Loading...</p></div>';
+ sb.from('info_notes').select('id,title,body,updated_at').order('updated_at',{ascending:false}).then(function(q){var l=(q.data||[]);
+  $('lg').innerHTML=(q.error||!l.length)?'<p>Nothing here yet. We add what you tell us about your business as we go.</p>':l.map(function(x){return '<div class="note"><b>'+esc(x.title)+'</b><div>'+esc(x.body).replace(/\n/g,'<br>')+'</div><small>Updated '+esc((x.updated_at||'').slice(0,10))+'</small></div>';}).join('');});}
+function users(){var pg=$('pg');pg.innerHTML='<h1>Add users</h1><div class="price"><b>First account: $80</b><br><b>Each additional user: $60</b></div><p class="fine">Add a teammate who should see this calendar and your information logs. Enter their email and we will set them up and confirm with you.</p><label for="ie">Their email</label><input id="ie" type="email" autocomplete="off"><button class="btn" id="ib">Request invite</button><p class="msg" id="im"></p>';
+ $('ib').onclick=function(){var v=$('ie').value.trim();if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(v)){$('im').className='msg bad';$('im').textContent='Enter a valid email address.';return;}
+  $('ib').disabled=true;sb.from('user_invites').insert({email:v}).then(function(q){$('ib').disabled=false;
+   if(q.error){$('im').className='msg bad';$('im').innerHTML='We could not save this request. Email us at <a href="mailto:matt@breakerops.com">matt@breakerops.com</a> and we will add them.';}
+   else{$('im').className='msg ok';$('im').textContent='Request received. We will confirm with you before adding anyone.';$('ie').value='';}});};}
+function profile(){var pg=$('pg'),n=(user.user_metadata&&user.user_metadata.full_name)||'';
+ pg.innerHTML='<h1>Profile</h1><label>Email</label><p style="margin:2px 0 12px">'+esc(user.email)+'</p><label for="pn">Name</label><input id="pn" value="'+esc(n)+'" autocomplete="name"><button class="btn s" id="sn">Save name</button><p class="msg" id="nm"></p><h2 style="margin-top:18px">Change password</h2><label for="p1">New password (at least 10 characters)</label><input id="p1" type="password" autocomplete="new-password"><label for="p2">Repeat new password</label><input id="p2" type="password" autocomplete="new-password"><button class="btn" id="sp">Save password</button><p class="msg" id="pm"></p>';
+ $('sn').onclick=function(){sb.auth.updateUser({data:{full_name:$('pn').value.trim()}}).then(function(r){$('nm').className='msg '+(r.error?'bad':'ok');$('nm').textContent=r.error?'Could not save. Try again.':'Name saved.';});};
+ $('sp').onclick=function(){var a=$('p1').value,b=$('p2').value,m=$('pm');m.className='msg bad';if(a.length<10){m.textContent='Use at least 10 characters.';return;}if(a!==b){m.textContent='The two passwords do not match.';return;}
+  sb.auth.updateUser({password:a}).then(function(r){if(r.error){m.textContent=r.error.message||'Could not save. Try again.';}else{m.className='msg ok';m.textContent='Password saved.';$('p1').value='';$('p2').value='';}});};}
+$('mb').onclick=function(e){e.stopPropagation();$('mn').hidden=true;var h=$('mm').hidden;$('mm').hidden=!h;$('mb').setAttribute('aria-expanded',h);};
+Array.prototype.forEach.call($('mm').querySelectorAll('[data-go]'),function(b){b.onclick=function(){go(b.dataset.go);};});
+window.addEventListener('hashchange',function(){if(user)route();});
+
 $('out').onclick=function(){sb.auth.signOut().then(function(){location.replace('/login/');});};
 sb.auth.getSession().then(function(r){
  if(!r.data.session){location.replace('/login/');return;}
- $('who').textContent=r.data.session.user.email;
+ user=r.data.session.user;$('who').textContent=user.email;route();
  sb.from('calendar_items').select('id,title,due_date,notes').order('due_date').then(function(q){items=q.data||[];render();});
 });
 render();
