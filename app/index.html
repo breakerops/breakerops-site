@@ -1,0 +1,54 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your calendar | BreakerOps</title><meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><meta name="theme-color" content="#111111">
+<style>*{box-sizing:border-box}body{margin:0;background:#fff;color:#111;font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}a{color:#111}.wrap{max-width:720px;margin:0 auto;padding:0 22px}header{padding:20px 0}.hi{display:flex;justify-content:space-between;align-items:center}.brand{font-weight:800;letter-spacing:-.02em;text-decoration:none;font-size:20px}.brand span{font-weight:400}.btn{display:inline-block;background:#111;color:#fff;border:2px solid #111;border-radius:10px;padding:12px 22px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}.btn:hover{background:#fff;color:#111}.btn.s{background:#fff;color:#111;padding:6px 14px;font-size:15px}.btn.s:hover{background:#111;color:#fff}.btn[disabled]{opacity:.45;cursor:default}.btn[disabled]:hover{background:#fff;color:#111}input{width:100%;font:inherit;padding:12px;border:2px solid #111;border-radius:10px;background:#fff;color:#111;margin:6px 0 14px}label{font-size:15px;font-weight:600}h1{font-size:30px;letter-spacing:-.02em;margin:20px 0 14px}h2{font-size:20px;margin:34px 0 8px}.fine{font-size:14px;color:#444}.msg{min-height:22px;font-size:15px}
+.tabs{display:flex;gap:8px;margin:0 0 14px}.tabs button{font:inherit;font-size:15px;background:#fff;color:#111;border:2px solid #111;border-radius:999px;padding:5px 14px;cursor:pointer}.tabs button[aria-pressed=true]{background:#111;color:#fff}
+.nav{display:flex;align-items:center;justify-content:space-between;margin:0 0 8px}.nav b{font-size:18px}.nav button{font:inherit;background:#fff;border:2px solid #111;border-radius:8px;padding:2px 12px;cursor:pointer}
+.grid{display:grid;grid-template-columns:repeat(7,1fr);border-top:2px solid #111;border-left:1px solid #ccc}.grid div{border-right:1px solid #ccc;border-bottom:1px solid #ccc;min-height:62px;padding:3px;font-size:12px;overflow:hidden}.grid .h{min-height:0;font-weight:700;text-align:center;font-size:12px}.grid .d{color:#444}.grid .t{background:#111;color:#fff;border-radius:4px;padding:1px 4px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
+.list{list-style:none;padding:0;margin:0;border-top:2px solid #111}.list li{padding:12px 0;border-bottom:1px solid #ccc}.list small{color:#444;display:block}
+.int{list-style:none;padding:0;margin:0;border-top:2px solid #111}.int li{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #ccc}.int small{color:#444;display:block;font-size:14px}
+</style></head><body>
+<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><span><span class="fine" id="who"></span> <button class="btn s" id="out">Sign out</button></span></div></header>
+<main><div class="wrap">
+<h1>What we are tracking for you</h1>
+<div class="tabs"><button id="tm" aria-pressed="true">Month</button><button id="tl" aria-pressed="false">List</button></div>
+<div id="mv"><div class="nav"><button id="pv" aria-label="Previous month">&lt;</button><b id="mt"></b><button id="nx" aria-label="Next month">&gt;</button></div><div class="grid" id="g"></div></div>
+<div id="lv" hidden><ul class="list" id="ls"></ul></div>
+<p class="fine" id="empty" hidden>Nothing tracked yet. We will add items here as we set things up with you.</p>
+<h2>Connect</h2>
+<ul class="int">
+<li><span>Google Calendar<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
+<li><span>Outlook<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
+<li><span>Slack<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
+</ul>
+<p class="fine">Connecting is optional. We only read what you allow, and you can disconnect at any time.</p>
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
+var items=[],cur=new Date();cur.setDate(1);
+function $(i){return document.getElementById(i);}
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function render(){
+ $('empty').hidden=items.length>0;
+ var y=cur.getFullYear(),mo=cur.getMonth();
+ $('mt').textContent=cur.toLocaleString('en-US',{month:'long',year:'numeric'});
+ var h='';['S','M','T','W','T','F','S'].forEach(function(d){h+='<div class="h">'+d+'</div>';});
+ var first=new Date(y,mo,1).getDay(),n=new Date(y,mo+1,0).getDate();
+ for(var i=0;i<first;i++)h+='<div></div>';
+ for(var d=1;d<=n;d++){var k=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
+  h+='<div><span class="d">'+d+'</span>'+items.filter(function(x){return x.due_date===k;}).map(function(x){return '<div class="t" title="'+esc(x.title)+'">'+esc(x.title)+'</div>';}).join('')+'</div>';}
+ $('g').innerHTML=h;
+ $('ls').innerHTML=items.map(function(x){return '<li><b>'+esc(x.title)+'</b><small>'+esc(x.due_date)+(x.notes?' - '+esc(x.notes):'')+'</small></li>';}).join('');
+}
+function view(l){$('mv').hidden=l;$('lv').hidden=!l;$('tm').setAttribute('aria-pressed',!l);$('tl').setAttribute('aria-pressed',l);}
+$('tm').onclick=function(){view(false);};$('tl').onclick=function(){view(true);};
+$('pv').onclick=function(){cur.setMonth(cur.getMonth()-1);render();};$('nx').onclick=function(){cur.setMonth(cur.getMonth()+1);render();};
+$('out').onclick=function(){sb.auth.signOut().then(function(){location.replace('/login/');});};
+sb.auth.getSession().then(function(r){
+ if(!r.data.session){location.replace('/login/');return;}
+ $('who').textContent=r.data.session.user.email;
+ sb.from('calendar_items').select('id,title,due_date,notes').order('due_date').then(function(q){items=q.data||[];render();});
+});
+</script></body></html>
