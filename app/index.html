@@ -8,47 +8,71 @@
 .grid{display:grid;grid-template-columns:repeat(7,1fr);border-top:2px solid #111;border-left:1px solid #ccc}.grid div{border-right:1px solid #ccc;border-bottom:1px solid #ccc;min-height:62px;padding:3px;font-size:12px;overflow:hidden}.grid .h{min-height:0;font-weight:700;text-align:center;font-size:12px}.grid .d{color:#444}.grid .t{background:#111;color:#fff;border-radius:4px;padding:1px 4px;margin-top:2px;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .list{list-style:none;padding:0;margin:0;border-top:2px solid #111}.list li{padding:12px 0;border-bottom:1px solid #ccc}.list small{color:#444;display:block}
 .int{list-style:none;padding:0;margin:0;border-top:2px solid #111}.int li{display:flex;justify-content:space-between;align-items:center;padding:12px 0;border-bottom:1px solid #ccc}.int small{color:#444;display:block;font-size:14px}
-.hi{gap:10px}.brand{white-space:nowrap}.hi>span{display:flex;align-items:center;gap:10px;min-width:0}#who{overflow:hidden;text-overflow:ellipsis;white-space:nowrap;max-width:46vw;font-size:13px}.btn.s{white-space:nowrap;flex:none}</style></head><body>
-<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><span><span class="fine" id="who"></span> <button class="btn s" id="out">Sign out</button></span></div></header>
-<main><div class="wrap">
-<h1>What we are tracking for you</h1>
-<div class="tabs"><button id="tm" aria-pressed="true">Month</button><button id="tl" aria-pressed="false">List</button></div>
-<div id="mv"><div class="nav"><button id="pv" aria-label="Previous month">&lt;</button><b id="mt"></b><button id="nx" aria-label="Next month">&gt;</button></div><div class="grid" id="g"></div></div>
-<div id="lv" hidden><ul class="list" id="ls"></ul></div>
-<p class="fine" id="empty" hidden>Nothing tracked yet. We will add items here as we set things up with you.</p>
-<h2>Connect</h2>
-<ul class="int">
+.app{display:flex;flex-direction:column;height:100dvh}main{flex:1;min-height:0;display:flex;flex-direction:column}main .wrap{width:100%;flex:1;min-height:0;display:flex;flex-direction:column;padding-bottom:12px}header{padding:12px 0}
+.hr{display:flex;gap:8px;align-items:center;position:relative}.btn.s{padding:4px 12px;font-size:14px;white-space:nowrap}
+.menu{position:absolute;right:0;top:40px;background:#fff;border:2px solid #111;border-radius:10px;padding:10px 14px;width:min(300px,86vw);z-index:5}.menu[hidden]{display:none}.menu .int{border-top:0}.menu .int li{padding:8px 0}.menu .who{font-size:13px;color:#444;word-break:break-all;margin:0 0 6px}
+.bar{display:flex;align-items:center;justify-content:space-between;gap:8px;margin:0 0 8px}.seg{display:flex;gap:6px}.seg button{font:inherit;font-size:13px;background:#fff;color:#111;border:2px solid #111;border-radius:6px;padding:2px 10px;cursor:pointer}.seg button[aria-pressed=true]{background:#111;color:#fff}
+.nav{margin:0 0 6px}.nav b{font-size:16px}.nav button{padding:0 10px}
+#cv{flex:1;min-height:0;display:flex;flex-direction:column}
+.grid{flex:1;min-height:0;grid-auto-rows:minmax(0,1fr);grid-template-rows:auto}.grid div{min-height:0}.grid .h{grid-row:auto}
+.grid.m{grid-template-rows:auto repeat(6,minmax(0,1fr))}.grid.w{grid-template-rows:auto minmax(0,1fr)}
+.dl{flex:1;overflow:auto}.today{outline:2px solid #111;outline-offset:-2px}
+#empty{margin:6px 0 0;font-size:13px}
+</style></head><body><div class="app">
+<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><div class="hr"><button class="btn s" id="cb" aria-expanded="false">Connect</button><button class="btn s" id="out">Sign out</button>
+<div class="menu" id="mn" hidden><p class="who" id="who"></p><ul class="int">
 <li><span>Google Calendar<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
 <li><span>Outlook<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
 <li><span>Slack<small>Not connected</small></span><button class="btn s" disabled>Connect</button></li>
-</ul>
-<p class="fine">Connecting is optional. We only read what you allow, and you can disconnect at any time.</p>
-</div></main>
+</ul><p class="fine">Optional. We only read what you allow, and you can disconnect any time.</p></div></div></div></header>
+<main><div class="wrap">
+<div class="bar"><div class="seg" id="sg"><button data-v="m" aria-pressed="true">Month</button><button data-v="w" aria-pressed="false">Week</button><button data-v="d" aria-pressed="false">Day</button></div></div>
+<div class="nav"><button id="pv" aria-label="Previous">&lt;</button><b id="mt"></b><button id="nx" aria-label="Next">&gt;</button></div>
+<div id="cv"></div>
+<p class="fine" id="empty" hidden>Nothing here yet. We add items as we set things up with you.</p>
+</div></main></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
-var items=[],cur=new Date();cur.setDate(1);
+var items=[],cur=new Date(),vw='m';cur.setHours(0,0,0,0);
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function key(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
+function on(k){return items.filter(function(x){return x.due_date===k;});}
+function chips(k){return on(k).map(function(x){return '<div class="t" title="'+esc(x.title)+'">'+esc(x.title)+'</div>';}).join('');}
+var DN=['S','M','T','W','T','F','S'],tk=key(new Date());
+function cell(d){var k=key(d);return '<div'+(k===tk?' class="today"':'')+'><span class="d">'+d.getDate()+'</span>'+chips(k)+'</div>';}
 function render(){
- $('empty').hidden=items.length>0;
- var y=cur.getFullYear(),mo=cur.getMonth();
- $('mt').textContent=cur.toLocaleString('en-US',{month:'long',year:'numeric'});
- var h='';['S','M','T','W','T','F','S'].forEach(function(d){h+='<div class="h">'+d+'</div>';});
- var first=new Date(y,mo,1).getDay(),n=new Date(y,mo+1,0).getDate();
- for(var i=0;i<first;i++)h+='<div></div>';
- for(var d=1;d<=n;d++){var k=y+'-'+String(mo+1).padStart(2,'0')+'-'+String(d).padStart(2,'0');
-  h+='<div><span class="d">'+d+'</span>'+items.filter(function(x){return x.due_date===k;}).map(function(x){return '<div class="t" title="'+esc(x.title)+'">'+esc(x.title)+'</div>';}).join('')+'</div>';}
- $('g').innerHTML=h;
- $('ls').innerHTML=items.map(function(x){return '<li><b>'+esc(x.title)+'</b><small>'+esc(x.due_date)+(x.notes?' - '+esc(x.notes):'')+'</small></li>';}).join('');
+ $('empty').hidden=items.length>0;var h='',y=cur.getFullYear(),mo=cur.getMonth();
+ if(vw==='m'){
+  $('mt').textContent=cur.toLocaleString('en-US',{month:'long',year:'numeric'});
+  DN.forEach(function(d){h+='<div class="h">'+d+'</div>';});
+  var first=new Date(y,mo,1).getDay(),n=new Date(y,mo+1,0).getDate();
+  for(var i=0;i<first;i++)h+='<div></div>';
+  for(var d=1;d<=n;d++)h+=cell(new Date(y,mo,d));
+  $('cv').innerHTML='<div class="grid m">'+h+'</div>';
+ }else if(vw==='w'){
+  var s=new Date(cur);s.setDate(s.getDate()-s.getDay());var e=new Date(s);e.setDate(e.getDate()+6);
+  $('mt').textContent=s.toLocaleString('en-US',{month:'short',day:'numeric'})+' - '+e.toLocaleString('en-US',{month:'short',day:'numeric'});
+  DN.forEach(function(d){h+='<div class="h">'+d+'</div>';});
+  for(var i=0;i<7;i++){var x=new Date(s);x.setDate(s.getDate()+i);h+=cell(x);}
+  $('cv').innerHTML='<div class="grid w">'+h+'</div>';
+ }else{
+  $('mt').textContent=cur.toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  var l=on(key(cur));
+  $('cv').innerHTML='<ul class="list dl">'+(l.length?l.map(function(x){return '<li><b>'+esc(x.title)+'</b>'+(x.notes?'<small>'+esc(x.notes)+'</small>':'')+'</li>';}).join(''):'<li class="fine">Nothing on this day.</li>')+'</ul>';
+ }
 }
-function view(l){$('mv').hidden=l;$('lv').hidden=!l;$('tm').setAttribute('aria-pressed',!l);$('tl').setAttribute('aria-pressed',l);}
-$('tm').onclick=function(){view(false);};$('tl').onclick=function(){view(true);};
-$('pv').onclick=function(){cur.setMonth(cur.getMonth()-1);render();};$('nx').onclick=function(){cur.setMonth(cur.getMonth()+1);render();};
+function step(n){if(vw==='m'){cur.setDate(1);cur.setMonth(cur.getMonth()+n);}else if(vw==='w')cur.setDate(cur.getDate()+7*n);else cur.setDate(cur.getDate()+n);render();}
+$('pv').onclick=function(){step(-1);};$('nx').onclick=function(){step(1);};
+Array.prototype.forEach.call($('sg').children,function(b){b.onclick=function(){vw=b.dataset.v;Array.prototype.forEach.call($('sg').children,function(o){o.setAttribute('aria-pressed',o===b);});render();};});
+$('cb').onclick=function(e){e.stopPropagation();var h=$('mn').hidden;$('mn').hidden=!h;$('cb').setAttribute('aria-expanded',h);};
+document.addEventListener('click',function(e){if(!$('mn').contains(e.target))$('mn').hidden=true;});
 $('out').onclick=function(){sb.auth.signOut().then(function(){location.replace('/login/');});};
 sb.auth.getSession().then(function(r){
  if(!r.data.session){location.replace('/login/');return;}
  $('who').textContent=r.data.session.user.email;
  sb.from('calendar_items').select('id,title,due_date,notes').order('due_date').then(function(q){items=q.data||[];render();});
 });
+render();
 </script></body></html>
