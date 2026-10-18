@@ -1,0 +1,60 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Your day | BreakerOps</title><meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><meta name="theme-color" content="#111111">
+<style>
+*{box-sizing:border-box}
+:root{--bg:#fff;--fg:#111;--muted:#595959;--border:#d8d8dc}
+@media (prefers-color-scheme: dark){:root{--bg:#171717;--fg:#e8e8ed;--muted:#aaaab0;--border:#3a3a3c}}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:0 22px}
+header{padding:18px 0}
+.brand{font-weight:800;letter-spacing:-.02em;font-size:20px}
+.brand span{font-weight:400}
+.biz{font-size:14px;color:var(--muted);margin-top:2px}
+h1{font-size:28px;letter-spacing:-.02em;margin:26px 0 4px}
+.sub{font-size:14px;color:var(--muted);margin:0 0 18px}
+.list{list-style:none;padding:0;margin:0;border-top:2px solid var(--border)}
+.list li{display:flex;gap:16px;padding:12px 0;border-bottom:1px solid var(--border)}
+.t{font-variant-numeric:tabular-nums;font-weight:700;white-space:nowrap;min-width:74px}
+.i small{color:var(--muted);display:block;font-size:14px}
+.empty{margin:30px 0;color:var(--muted)}
+.foot{font-size:13px;color:var(--muted);margin:44px 0 30px}
+</style></head><body>
+<header><div class="wrap"><div class="brand">Breaker<span>Ops</span></div><div class="biz" id="biz"></div></div></header>
+<main><div class="wrap">
+<h1 id="day">Your day</h1>
+<p class="sub" id="sub"></p>
+<ul class="list" id="list"></ul>
+<p class="empty" id="empty" hidden>Nothing on the books for today.</p>
+<p class="foot">This page is yours alone - it opens from your private link. Something wrong or missing? Just reply to your BreakerOps text.</p>
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var q=new URLSearchParams(location.search),tok=q.get('t')||'';
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function fmt(t){if(!t)return'Anytime';var p=t.split(':'),h=+p[0],m=p[1],ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+m+' '+ap;}
+function show(msg){document.getElementById('sub').textContent=msg;}
+if(!tok){show('This link is incomplete.');}
+else{
+var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne',{global:{headers:{'x-day-token':tok}}});
+var d=q.get('date');
+if(!d||!/^\d{4}-\d{2}-\d{2}$/.test(d)){d=new Intl.DateTimeFormat('en-CA').format(new Date());}
+Promise.all([
+ sb.from('businesses').select('name').limit(1),
+ sb.from('calendar_items').select('title,due_time,notes').eq('due_date',d).order('due_time',{ascending:true,nullsFirst:false}).order('title')
+]).then(function(r){
+ var biz=(r[0].data&&r[0].data[0])?r[0].data[0].name:'';
+ if(biz)document.getElementById('biz').textContent=biz;
+ var dt=new Date(d+'T12:00:00');
+ document.getElementById('day').textContent=dt.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'});
+ var today=new Intl.DateTimeFormat('en-CA').format(new Date());
+ show(d===today?'Here is what your day looks like.':'A look at this day.');
+ var items=r[1].data||[];
+ if(!items.length){document.getElementById('empty').hidden=false;return;}
+ document.getElementById('list').innerHTML=items.map(function(x){
+  return '<li><span class="t">'+esc(fmt(x.due_time))+'</span><span class="i">'+esc(x.title)+(x.notes?'<small>'+esc(x.notes)+'</small>':'')+'</span></li>';
+ }).join('');
+}).catch(function(){show('Could not load your day. Please try again in a moment.');});
+}
+</script></body></html>
