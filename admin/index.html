@@ -19,7 +19,7 @@ h1{font-size:28px;letter-spacing:-.02em;margin:26px 0 4px}
 .status{font-size:14px;color:var(--muted);margin:0 0 12px}
 .status.ok{color:#16703a}
 label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
-input[type=email],input[type=password],input[type=text]{width:100%;padding:10px 12px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
+input[type=email],input[type=password],input[type=text],select{width:100%;padding:10px 12px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
 button{margin-top:12px;padding:10px 18px;font-size:15px;font-weight:600;border:1px solid var(--fg);border-radius:8px;background:var(--fg);color:var(--bg);cursor:pointer}
 button.ghost{background:transparent;color:var(--fg);border-color:var(--border);font-weight:500}
 .note{font-size:14px;color:var(--muted);margin:8px 0 0}
@@ -72,18 +72,30 @@ button.ghost{background:transparent;color:var(--fg);border-color:var(--border);f
 <p class="status" id="s-telnyx">Checking...</p>
 <label for="k-telnyx">API key</label>
 <input id="k-telnyx" type="password" autocomplete="off" placeholder="Enter key">
-<button class="save" data-p="telnyx" data-k="k-telnyx">Save Telnyx key</button>
-<p class="note">The send path is being built. The key will be picked up when texting goes live.</p>
+<label for="n-telnyx">Sending number, with +1</label>
+<input id="n-telnyx" type="text" autocomplete="off" placeholder="+1...">
+<label for="p-telnyx">Messaging profile ID (optional)</label>
+<input id="p-telnyx" type="text" autocomplete="off" placeholder="From your Telnyx 10DLC setup">
+<button id="save-telnyx">Save Telnyx settings</button>
+<p class="note">Once the key, number, and 10DLC are all in place, texts send directly from your number instead of through Instinct.</p>
 <p class="msg" id="m-telnyx"></p>
 </div>
 
 <div class="card">
 <h2>Model provider</h2>
 <p class="status" id="s-model">Checking...</p>
-<label for="k-model">API key</label>
+<label for="v-model">Provider</label>
+<select id="v-model">
+<option value="instinct">Instinct (built in, concierge-style)</option>
+<option value="anthropic">Anthropic</option>
+<option value="openai">OpenAI</option>
+</select>
+<label for="mn-model">Model name (not needed for Instinct)</label>
+<input id="mn-model" type="text" autocomplete="off" placeholder="e.g. claude-haiku-4-5 or gpt-5-mini">
+<label for="k-model">API key (not needed for Instinct)</label>
 <input id="k-model" type="password" autocomplete="off" placeholder="Enter key">
-<button class="save" data-p="model" data-k="k-model">Save model key</button>
-<p class="note">Today the engine runs through the built-in Instinct path. A saved key here is where a direct provider account will plug in.</p>
+<button id="save-model">Save model settings</button>
+<p class="note">Switching provider flips one backend setting. The product keeps working through Instinct until a provider and key are saved.</p>
 <p class="msg" id="m-model"></p>
 </div>
 
@@ -115,6 +127,11 @@ var OWNER='jake@breakerops.com';
 var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
 var $=function(id){return document.getElementById(id);};
 function err(id,msg){var e=$(id);e.textContent=msg||'';e.hidden=!msg;}
+var PROVIDERS={
+ instinct:{kind:'manual',endpoint:null},
+ anthropic:{kind:'openai_compatible',endpoint:'https://api.anthropic.com/v1'},
+ openai:{kind:'openai_compatible',endpoint:'https://api.openai.com/v1'}
+};
 
 sb.auth.onAuthStateChange(function(ev,session){
  if(ev==='PASSWORD_RECOVERY'){$('auth').hidden=true;$('app').hidden=true;$('newpw').hidden=false;return;}
@@ -153,22 +170,41 @@ function showApp(session){
  if(em!==OWNER){sb.auth.signOut();err('autherr','Owner access only.');return;}
  $('auth').hidden=true;$('newpw').hidden=true;$('app').hidden=false;
  $('who').textContent=session.user.email;
- loadStatus();loadUsage();
+ loadStatus();loadUsage();loadModel();
 }
 
-function statText(el,row){
- var e=$(el);
- if(!row){e.textContent='No key saved yet.';e.className='status';return;}
- if(row.connected){e.textContent='Key saved ('+row.key_hint+')';e.className='status ok';}
- else{e.textContent='No key saved yet.';e.className='status';}
-}
+function findRow(rows,p){return (rows||[]).find(function(x){return x.provider===p;});}
 
 function loadStatus(){
  sb.rpc('connection_status').then(function(r){
-  if(r.error){statText('s-telnyx');statText('s-model');return;}
-  var rows=r.data||[];
-  statText('s-telnyx',rows.find(function(x){return x.provider==='telnyx';}));
-  statText('s-model',rows.find(function(x){return x.provider==='model';}));
+  if(r.error){$('s-telnyx').textContent='Could not load status.';$('s-model').textContent='';return;}
+  var t=findRow(r.data,'telnyx');
+  var e=$('s-telnyx');
+  var bits=[];
+  if(t&&t.connected)bits.push('Key saved ('+t.key_hint+')');
+  else bits.push('No key saved yet');
+  if(t&&t.meta&&t.meta.from_number)bits.push('sending from '+t.meta.from_number);
+  else bits.push('no sending number yet');
+  e.textContent=bits.join(', ')+'.';
+  e.className='status'+((t&&t.connected&&t.meta&&t.meta.from_number)?' ok':'');
+ });
+}
+
+function loadModel(){
+ sb.rpc('active_model').then(function(r){
+  var e=$('s-model');
+  if(r.error||!r.data||!r.data.length){e.textContent='Could not load the active provider.';return;}
+  var m=r.data[0];
+  e.textContent=m.kind==='manual'
+   ? 'Active: Instinct (concierge-style).'
+   : 'Active: '+m.name+(m.model?' / '+m.model:'')+'.';
+  e.className='status ok';
+  sb.rpc('connection_status').then(function(c){
+   var row=findRow(c.data,m.name);
+   if(m.kind!=='manual'){
+    e.textContent+=row&&row.connected?' Key saved ('+row.key_hint+').':' No key saved for it yet.';
+   }
+  });
  });
 }
 
@@ -187,18 +223,31 @@ function loadUsage(){
  });
 }
 
-Array.prototype.forEach.call(document.querySelectorAll('button.save'),function(b){
- b.onclick=function(){
-  var p=b.getAttribute('data-p'),kid=b.getAttribute('data-k');
-  var key=$(kid).value.trim();
-  var m=$('m-'+p);m.textContent='';m.className='msg';
-  if(!key){m.textContent='Enter a key first.';m.className='msg err';return;}
-  sb.rpc('set_connection',{p_provider:p,p_key:key}).then(function(r){
-   if(r.error){m.textContent=r.error.message;m.className='msg err';}
-   else{m.textContent='Saved.';$(kid).value='';loadStatus();}
-  });
- };
-});
+$('save-telnyx').onclick=function(){
+ var m=$('m-telnyx');m.textContent='';m.className='msg';
+ var key=$('k-telnyx').value.trim(),num=$('n-telnyx').value.trim(),prof=$('p-telnyx').value.trim();
+ var meta={};
+ if(num)meta.from_number=num;
+ if(prof)meta.messaging_profile_id=prof;
+ if(!key&&!num&&!prof){m.textContent='Nothing to save.';m.className='msg err';return;}
+ sb.rpc('set_connection',{p_provider:'telnyx',p_key:key||null,p_meta:Object.keys(meta).length?meta:null}).then(function(r){
+  if(r.error){m.textContent=r.error.message;m.className='msg err';}
+  else{m.textContent='Saved.';$('k-telnyx').value='';loadStatus();}
+ });
+};
+
+$('save-model').onclick=function(){
+ var m=$('m-model');m.textContent='';m.className='msg';
+ var name=$('v-model').value,model=$('mn-model').value.trim(),key=$('k-model').value.trim();
+ var p=PROVIDERS[name];
+ var calls=[sb.rpc('set_active_model',{p_name:name,p_kind:p.kind,p_endpoint:p.endpoint,p_model:p.kind==='manual'?null:(model||null)})];
+ if(key)calls.push(sb.rpc('set_connection',{p_provider:name,p_key:key,p_meta:null}));
+ Promise.all(calls).then(function(rs){
+  var bad=rs.find(function(x){return x.error;});
+  if(bad){m.textContent=bad.error.message;m.className='msg err';}
+  else{m.textContent='Saved.';$('k-model').value='';loadModel();}
+ });
+};
 
 $('signout').onclick=function(e){e.preventDefault();sb.auth.signOut();};
 </script></body></html>
