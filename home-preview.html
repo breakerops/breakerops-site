@@ -20,13 +20,13 @@ header{padding:18px 0}
 nav a{margin-left:20px;text-decoration:none;font-size:15px;color:var(--muted)}
 nav a:hover{text-decoration:underline}
 h1{font-size:clamp(30px,6vw,44px);line-height:1.12;letter-spacing:-.02em;margin:44px 0 12px}
-.sub{font-size:19px;color:var(--muted);margin:0 0 8px;max-width:34em}
+.sub{font-size:22px;color:var(--muted);margin:0 0 8px;max-width:34em}
 .lines{list-style:none;padding:0;margin:26px 0 34px;color:var(--fg)}
-.lines li{padding:7px 0;border-bottom:1px solid var(--border);font-size:17px}
+.lines li{padding:10px 0;border-bottom:1px solid var(--border);font-size:20px}
 .lines li:first-child{border-top:2px solid var(--border)}
 .row{display:flex;gap:10px}
-.row input{flex:1;min-width:0;font:inherit;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
-.btn{display:inline-block;background:var(--fg);color:var(--bg);border:1px solid var(--fg);border-radius:8px;padding:12px 22px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
+.row input{flex:1;min-width:0;font:inherit;font-size:20px;padding:15px 16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
+.btn{display:inline-block;background:var(--fg);color:var(--bg);border:1px solid var(--fg);border-radius:8px;padding:15px 28px;font:inherit;font-size:20px;font-weight:600;cursor:pointer;text-decoration:none}
 .btn[disabled]{opacity:.5}
 .fine{font-size:14px;color:var(--muted);margin:10px 0 0}
 .ok{font-size:18px;font-weight:600;margin:18px 0}
@@ -49,17 +49,17 @@ footer a{color:var(--muted)}
 <div class="row"><input type="tel" id="ph" aria-label="Your mobile number" placeholder="Your mobile number" autocomplete="tel"><button class="btn" type="submit" id="go">Get started</button></div>
 <input type="text" id="hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
 <p class="fine">No app to learn. It's all plain text.</p>
-<p class="fine">By signing up you agree to receive texts from BreakerOps about setup and your reminders. Message and data rates may apply. Reply STOP to stop, HELP for help.</p>
+<p class="fine">By clicking "Get started", I agree to BreakerOps's <a href="/terms/" style="color:var(--muted);text-decoration:underline">Terms of Service</a> and <a href="/sms-terms/" style="color:var(--muted);text-decoration:underline">SMS Terms</a>, and acknowledge the <a href="/privacy/" style="color:var(--muted);text-decoration:underline">Privacy Policy</a>.</p>
 <p id="st" role="status" class="fine"></p>
 </form>
 <p id="done" class="ok" hidden>Got it. We will text <span id="to"></span> to get you set up. Nothing starts until you reply yes.</p>
 </div>
 </div></main>
-<footer><div class="wrap">BreakerOps &middot; <a href="mailto:matt@breakerops.com">matt@breakerops.com</a> &middot; <a href="/privacy/">Privacy</a><br>Your information stays yours. We use it only to set things up and send your reminders.</div></footer>
+<footer><div class="wrap">BreakerOps &middot; <a href="mailto:matt@breakerops.com">matt@breakerops.com</a> &middot; <a href="/terms/">Terms</a> &middot; <a href="/sms-terms/">SMS Terms</a> &middot; <a href="/privacy/">Privacy</a><br>Your information stays yours. We use it only to set things up and send your reminders.</div></footer>
 <script>
 (function(){
 var f=document.getElementById('f'),st=document.getElementById('st'),go=document.getElementById('go');
-var CONSENT='By signing up you agree to receive texts from BreakerOps about setup and your reminders. Message and data rates may apply. Reply STOP to stop, HELP for help.';
+var CONSENT='By clicking "Get started", I agree to BreakerOps\'s Terms of Service and SMS Terms, and acknowledge the Privacy Policy.';
 f.addEventListener('submit',function(e){e.preventDefault();
  if(document.getElementById('hp').value)return;
  var ph=document.getElementById('ph').value.trim();
