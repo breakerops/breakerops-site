@@ -1,0 +1,76 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BreakerOps | Your day, texted to you every morning.</title>
+<meta name="description" content="BreakerOps texts you your day every morning and keeps track of jobs, reminders, and follow-ups. No app - plain text.">
+<link rel="canonical" href="https://www.breakerops.com/">
+<meta property="og:title" content="BreakerOps | Your day, texted to you every morning."><meta property="og:description" content="Jobs, reminders, follow-ups - kept for you, sent by plain text. No app."><meta property="og:type" content="website"><meta property="og:url" content="https://www.breakerops.com/"><meta property="og:site_name" content="BreakerOps">
+<meta property="og:image" content="https://www.breakerops.com/assets/img/1-preview-keep-track.png"><meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#111111">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="32x32">
+<style>
+*{box-sizing:border-box}
+:root{--bg:#fff;--fg:#111;--muted:#595959;--border:#d8d8dc}
+@media (prefers-color-scheme: dark){:root{--bg:#171717;--fg:#e8e8ed;--muted:#aaaab0;--border:#3a3a3c}}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:0 22px}
+header{padding:18px 0}
+.hi{display:flex;justify-content:space-between;align-items:center}
+.brand{font-weight:800;letter-spacing:-.02em;font-size:20px;text-decoration:none;color:var(--fg)}
+.brand span{font-weight:400}
+nav a{margin-left:20px;text-decoration:none;font-size:15px;color:var(--muted)}
+nav a:hover{text-decoration:underline}
+h1{font-size:clamp(30px,6vw,44px);line-height:1.12;letter-spacing:-.02em;margin:44px 0 12px}
+.sub{font-size:19px;color:var(--muted);margin:0 0 8px;max-width:34em}
+.lines{list-style:none;padding:0;margin:26px 0 34px;color:var(--fg)}
+.lines li{padding:7px 0;border-bottom:1px solid var(--border);font-size:17px}
+.lines li:first-child{border-top:2px solid var(--border)}
+.row{display:flex;gap:10px}
+.row input{flex:1;min-width:0;font:inherit;padding:12px 14px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
+.btn{display:inline-block;background:var(--fg);color:var(--bg);border:1px solid var(--fg);border-radius:8px;padding:12px 22px;font:inherit;font-weight:600;cursor:pointer;text-decoration:none}
+.btn[disabled]{opacity:.5}
+.fine{font-size:14px;color:var(--muted);margin:10px 0 0}
+.ok{font-size:18px;font-weight:600;margin:18px 0}
+footer{margin:70px 0 30px;font-size:13px;color:var(--muted);border-top:1px solid var(--border);padding-top:16px}
+footer a{color:var(--muted)}
+.hp{position:absolute;left:-9999px}
+@media(max-width:480px){h1{font-size:28px}.sub{font-size:16px}}
+</style></head><body>
+<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><nav><a href="/how-it-works.html">How it works</a><a href="/login/">Log in</a></nav></div></header>
+<main id="main"><div class="wrap">
+<h1>Your day, texted to you every morning.</h1>
+<p class="sub">BreakerOps keeps track of the jobs, reminders, and follow-ups you'd otherwise carry in your head.</p>
+<ul class="lines">
+<li>You tell it what matters by plain text.</li>
+<li>Every morning, one text with your day in it.</li>
+<li>It reminds you at the right time, so nothing slips.</li>
+</ul>
+<div id="start">
+<form id="f" novalidate>
+<div class="row"><input type="email" id="em" aria-label="Your email" placeholder="Your email" autocomplete="email"><button class="btn" type="submit" id="go">Get started</button></div>
+<input type="text" id="hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+<p class="fine">No app to learn. It's all plain text. We email you to set things up, and nothing starts until you confirm.</p>
+<p id="st" role="status" class="fine"></p>
+</form>
+<p id="done" class="ok" hidden>Got it. We will write to <span id="to"></span> to get you set up. Nothing starts until you say yes.</p>
+</div>
+</div></main>
+<footer><div class="wrap">BreakerOps &middot; <a href="mailto:matt@breakerops.com">matt@breakerops.com</a> &middot; <a href="/privacy/">Privacy</a><br>Your information stays yours. We use it only to set things up and send your reminders.</div></footer>
+<script>
+(function(){
+var f=document.getElementById('f'),st=document.getElementById('st'),go=document.getElementById('go');
+f.addEventListener('submit',function(e){e.preventDefault();
+ if(document.getElementById('hp').value)return;
+ var em=document.getElementById('em').value.trim();
+ if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){st.textContent='Add your email so we can write to you.';return;}
+ var t='Get started. No details yet; onboarding by email.';
+ go.disabled=true;st.textContent='Sending...';
+ fetch('https://formsubmit.co/ajax/nick@breakerops.com',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+  body:JSON.stringify({_subject:'BreakerOps request: '+em,_template:'box',_captcha:'false',_honey:'',email:em,message:t,source:'breakerops.com home'})})
+ .then(function(r){return r.json();}).then(function(j){
+  if(j&&(j.success===true||j.success==='true')){f.hidden=true;document.getElementById('to').textContent=em;document.getElementById('done').hidden=false;}
+  else throw 0;
+ }).catch(function(){go.disabled=false;st.innerHTML='That did not go through. Please email <a href="mailto:matt@breakerops.com?subject='+encodeURIComponent('BreakerOps')+'&body='+encodeURIComponent(t)+'">matt@breakerops.com</a> instead.';});
+});
+})();
+</script>
+</body></html>
