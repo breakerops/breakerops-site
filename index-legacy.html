@@ -1,0 +1,67 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BreakerOps | We keep track of your business, so you don't have to.</title>
+<meta name="description" content="We keep track of your business, so you don't have to. Licenses, taxes, overtime, renewals. If it matters, we watch it and tell you when it needs you.">
+<link rel="canonical" href="https://www.breakerops.com/">
+<meta property="og:title" content="BreakerOps | We keep track of your business, so you don't have to."><meta property="og:description" content="We keep track of your business, so you don't have to. Anything with a date. No login, no app."><meta property="og:type" content="website"><meta property="og:url" content="https://www.breakerops.com/"><meta property="og:site_name" content="BreakerOps">
+<meta property="og:image" content="https://www.breakerops.com/assets/img/1-preview-keep-track.png"><meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#111111">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="32x32">
+<style>*{box-sizing:border-box}html{-webkit-text-size-adjust:100%}body{margin:0;background:#fff;color:#111;font:18px/1.55 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+a{color:#111}.wrap{max-width:720px;margin:0 auto;padding:0 22px}
+header{padding:22px 0}.hi{display:flex;justify-content:space-between;align-items:center}
+.brand{font-weight:800;letter-spacing:-.02em;text-decoration:none;font-size:20px}.brand span{font-weight:400}
+nav a{margin-left:20px;text-decoration:none;font-size:16px}nav a:hover{text-decoration:underline}
+.btn{display:inline-block;background:#111;color:#fff;border:2px solid #111;border-radius:10px;padding:14px 26px;font:inherit;font-weight:700;cursor:pointer;text-decoration:none}
+.btn:hover{background:#fff;color:#111}.btn[disabled]{opacity:.5}
+h1{font-size:clamp(34px,7vw,52px);line-height:1.08;letter-spacing:-.03em;margin:34px 0 14px}
+h2{font-size:22px;margin:40px 0 10px}.sub{font-size:20px;color:#333;margin:0 0 28px}
+textarea,input[type=email],input[type=text]{width:100%;font:inherit;padding:14px;border:2px solid #111;border-radius:10px;background:#fff;color:#111}
+textarea{min-height:130px;resize:vertical}input[type=email]{margin-top:12px}
+.fine{font-size:14px;color:#444;margin:10px 0 16px}.ok{font-size:20px;font-weight:700;margin:18px 0}
+.steps{list-style:none;padding:0;margin:44px 0 0;border-top:2px solid #111}
+.steps li{padding:16px 0;border-bottom:1px solid #ccc;display:flex;gap:16px}.steps b{min-width:26px}
+.chips{display:flex;flex-wrap:wrap;gap:10px;padding:0;list-style:none}.chips li{border:2px solid #111;border-radius:999px;padding:6px 16px;font-size:16px}
+.sg{margin:0 0 12px;font-size:15px;color:#444}.tags{display:flex;flex-wrap:wrap;gap:8px;margin:0 0 14px}.tags button{font:inherit;font-size:15px;background:#fff;color:#111;border:2px solid #111;border-radius:999px;padding:6px 14px;cursor:pointer}.tags button:hover,.tags button:focus-visible{background:#111;color:#fff;outline:none}
+@media(max-width:480px){.tags{gap:6px}.tags button{font-size:14px;padding:5px 11px}}
+.row{display:flex;gap:10px}.row input{flex:1;min-width:0;margin:0}.tags button[aria-pressed=true]{background:#111;color:#fff}
+footer{margin:70px 0 40px;font-size:14px;color:#444;border-top:1px solid #ccc;padding-top:18px}
+.hp{position:absolute;left:-9999px}
+h1{margin:14px 0 10px}.sub{font-size:18px;margin:0 0 16px}header{padding:14px 0}.sg{margin:0 0 8px}.tags{margin:0 0 16px}.fine{margin:8px 0 10px}footer{margin:22px 0 16px;padding-top:12px}.ok{margin:10px 0}
+@media(max-width:480px){nav a{margin-left:12px!important;font-size:14px!important}nav .btn{padding:6px 12px!important}h1{font-size:28px;margin:8px 0 8px}.tags button{font-size:13px;padding:4px 10px}.row .btn{padding:10px 14px;white-space:nowrap}.fine{font-size:13px}footer{font-size:12px;margin-top:14px}.sub{font-size:16px}body{font-size:16px}.btn{padding:12px 20px}input[type=email]{padding:12px}}
+</style></head><body>
+<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><nav><a href="/how-it-works.html">How it works</a><a href="/login/">Log in</a><a class="btn" style="padding:8px 16px;margin-left:20px;font-size:15px;color:#fff" href="/#start">Start</a></nav></div></header>
+<main id="main"><div class="wrap">
+<h1>We keep track of your business, so you don't have to.</h1>
+<p class="sub">Licenses, taxes, overtime, renewals. If it matters, we watch it and tell you when it needs you.</p>
+<div id="start">
+<form id="f" novalidate>
+<div class="row"><input type="email" id="em" aria-label="Your email" placeholder="Your email" autocomplete="email"><button class="btn" type="submit" id="go">Get started</button></div>
+<input type="text" id="hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+<p class="fine">We will email you to set things up. Nothing starts until you confirm.</p>
+<p id="st" role="status" class="fine"></p>
+</form>
+<p id="done" class="ok" hidden>Got it. We will write to <span id="to"></span> to get you set up. Nothing starts until you say yes.</p>
+</div>
+<p class="fine" style="margin-top:26px;font-size:16px;color:#111"><b>Your information stays yours.</b> We use it only to remind you. We never sell it or use it for our own benefit.</p>
+</div></main>
+<footer><div class="wrap">BreakerOps, 3800 Silver Lake Rd NE, St Anthony, MN 55421. <a href="mailto:matt@breakerops.com">matt@breakerops.com</a> &middot; <a href="/privacy/">Privacy</a><br>We keep records and send reminders. We do not give legal, tax or payroll advice.</div></footer>
+<script>
+(function(){
+var f=document.getElementById('f'),st=document.getElementById('st'),go=document.getElementById('go');
+f.addEventListener('submit',function(e){e.preventDefault();
+ if(document.getElementById('hp').value)return;
+ var em=document.getElementById('em').value.trim();
+ if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){st.textContent='Add your email so we can write to you.';return;}
+  var t='Get started. No details yet; onboarding by email.';
+ go.disabled=true;st.textContent='Sending...';
+ fetch('https://formsubmit.co/ajax/nick@breakerops.com',{method:'POST',headers:{'Content-Type':'application/json','Accept':'application/json'},
+  body:JSON.stringify({_subject:'BreakerOps request: '+em,_template:'box',_captcha:'false',_honey:'',email:em,message:t,source:'breakerops.com home'})})
+ .then(function(r){return r.json();}).then(function(j){
+  if(j&&(j.success===true||j.success==='true')){f.hidden=true;document.getElementById('to').textContent=em;document.getElementById('done').hidden=false;}
+  else throw 0;
+ }).catch(function(){go.disabled=false;st.innerHTML='That did not go through. Please email <a href="mailto:matt@breakerops.com?subject='+encodeURIComponent('BreakerOps')+'&body='+encodeURIComponent(t)+'">matt@breakerops.com</a> instead.';});
+});
+})();
+</script>
+</body></html>
