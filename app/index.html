@@ -39,16 +39,14 @@ body{background:var(--bg);color:var(--fg)}a{color:var(--accent)}.brand{color:var
 .week-agenda{overflow:auto;border-top:1px solid var(--border)}.week-day{display:grid;grid-template-columns:70px minmax(0,1fr);gap:12px;width:100%;padding:14px 8px;border:0;border-bottom:1px solid var(--border);background:var(--bg);color:var(--fg);text-align:left;font:inherit;cursor:pointer;min-height:64px}
 .week-date{font-size:14px;color:var(--muted)}.week-date strong{display:block;color:var(--fg);font-size:20px;font-weight:600}.week-events{min-width:0}.week-event{display:block;overflow-wrap:anywhere;white-space:normal;font-size:16px;line-height:1.4}.week-event+.week-event{margin-top:8px}.week-event small{display:block;color:var(--muted);font-size:13px}.week-empty{font-size:14px;color:var(--muted)}.list li b{overflow-wrap:anywhere}.grid.m{overflow:auto}.grid.m .day-cell{min-height:54px}.grid.m .event-count{display:block;font-size:11px;color:var(--muted)}
 @media(max-width:480px){.grid.m .t{display:none}.grid.m .day-cell.has-events .d:after{content:'';display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--accent);margin-left:4px}}
+
+.icon-button{width:44px;height:44px;display:grid;place-items:center;border:1px solid var(--border);border-radius:12px;background:transparent;color:var(--fg);cursor:pointer}.primary-nav{display:flex;gap:24px;margin:2px 0 22px;border-bottom:1px solid var(--border)}.primary-nav button{font:inherit;border:0;background:none;color:var(--muted);padding:10px 0;min-height:44px}.primary-nav button[aria-current=page]{color:var(--fg);border-bottom:2px solid var(--fg)}.settings-sub{font-size:15px;color:var(--muted);margin:0 0 28px}.pg h1{font-size:28px;margin:6px 0 6px}.settings-group{margin:0 0 20px;border:1px solid var(--border);border-radius:14px;overflow:hidden}.settings-row{display:flex;justify-content:space-between;align-items:center;gap:12px;min-height:60px;padding:15px 16px;color:var(--fg);text-decoration:none;border-bottom:1px solid var(--border);font-size:16px}.settings-row:last-child{border-bottom:0}.settings-row span{color:var(--muted);font-size:24px;font-weight:300;line-height:1}.settings-row small{font-size:12px;color:var(--muted)}.signout{font:inherit;font-size:16px;background:none;color:var(--muted);border:0;padding:12px 2px;min-height:44px;cursor:pointer}#mm{top:52px;box-shadow:0 14px 30px #0004;border-width:1px;padding:6px 16px;width:220px}#mm button{font-size:16px;display:flex;justify-content:space-between}#mm button:last-child{color:var(--fg);font-weight:400}.mock-label{position:fixed;bottom:8px;left:0;right:0;text-align:center;font-size:10px;letter-spacing:.1em;color:var(--muted);pointer-events:none}#pg{padding-bottom:30px}
 </style></head><body><div class="app">
-<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><div class="hr"><button class="btn s" id="cb" aria-expanded="false">Connect</button><button class="btn s" id="mb" aria-expanded="false">Menu</button>
-<div class="menu" id="mm" hidden><button data-go="">Calendar</button><button data-go="thoughts">Thoughts</button><button data-go="logs">Information logs</button><button data-go="users">Add users</button><button data-go="profile">Profile</button><button id="out">Sign out</button></div>
-<div class="menu" id="mn" hidden><p class="who" id="who"></p><ul class="int">
-<li><span>Google Calendar<small>Not connected</small></span><span class="connection-status">Not available yet</span></li>
-<li><span>Outlook<small>Not connected</small></span><span class="connection-status">Not available yet</span></li>
-<li><span>Slack<small>Not connected</small></span><span class="connection-status">Not available yet</span></li>
-</ul><p class="fine">Optional. We only read what you allow, and you can disconnect any time.</p></div></div></div></header>
+<header><div class="wrap hi"><a class="brand" href="/">Breaker<span>Ops</span></a><div class="hr"><button class="icon-button" id="mb" aria-label="Open navigation" aria-expanded="false"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path d="M4 6h16M4 12h16M4 18h16"/></svg></button>
+<div class="menu" id="mm" hidden><button data-go="">Calendar</button><button data-go="thoughts">Thoughts</button><button data-go="settings">Settings <span aria-hidden="true">&#9881;</span></button></div>
+</div></div></header>
 <main><div class="wrap">
-<div id="cal" style="flex:1;min-height:0;display:flex;flex-direction:column"><div class="bar"><div class="seg" id="sg"><button data-v="d" aria-pressed="true">My day</button><button data-v="w" aria-pressed="false">My week</button><button data-v="m" aria-pressed="false">My month</button></div></div>
+<div id="cal" style="flex:1;min-height:0;display:flex;flex-direction:column"><nav class="primary-nav" aria-label="Main"><button aria-current="page" onclick="go('')">Calendar</button><button onclick="go('thoughts')">Thoughts</button></nav><div class="bar"><div class="seg" id="sg"><button data-v="d" aria-pressed="true">My day</button><button data-v="w" aria-pressed="false">My week</button><button data-v="m" aria-pressed="false">My month</button></div></div>
 <button id="calendar-back" class="calendar-back" hidden></button><div class="nav"><button id="pv" aria-label="Previous">&lt;</button><b id="mt"></b><button id="nx" aria-label="Next">&gt;</button></div>
 <div id="cv"></div>
 <p class="fine" id="empty" hidden>Text us something you promised. Once confirmed, it will show up here.</p><p class="fine" id="text-contact"></p></div>
@@ -94,23 +92,23 @@ function render(){
 function step(n){if(vw==='m'){cur.setDate(1);cur.setMonth(cur.getMonth()+n);}else if(vw==='w')cur.setDate(cur.getDate()+7*n);else cur.setDate(cur.getDate()+n);render();}
 $('pv').onclick=function(){step(-1);};$('nx').onclick=function(){step(1);};
 Array.prototype.forEach.call($('sg').children,function(b){b.onclick=function(){dayOrigin=null;vw=b.dataset.v;Array.prototype.forEach.call($('sg').children,function(o){o.setAttribute('aria-pressed',o===b);});render();};});
-$('cb').onclick=function(e){e.stopPropagation();$('mm').hidden=true;var h=$('mn').hidden;$('mn').hidden=!h;$('cb').setAttribute('aria-expanded',h);};
-document.addEventListener('click',function(e){if(!$('mn').contains(e.target))$('mn').hidden=true;if(!$('mm').contains(e.target))$('mm').hidden=true;});
+
+document.addEventListener('click',function(e){if(!$('mm').contains(e.target)&&!$('mb').contains(e.target)){$('mm').hidden=true;$('mb').setAttribute('aria-expanded','false');}});
 var user=null;
 var CUSTOMER_TEXT_NUMBER='xxx-xxx-xxxx';
 function textUs(){return 'Text us at '+CUSTOMER_TEXT_NUMBER+' <span class="fine">(number coming soon)</span>';}
 function go(p){$('mm').hidden=true;location.hash=p;}
-function route(){var p=location.hash.replace('#','');$('cal').hidden=!!p&&['logs','users','profile','thoughts'].indexOf(p)>=0;var pg=$('pg');
- if(['logs','users','profile','thoughts'].indexOf(p)<0){pg.hidden=true;$('cal').hidden=false;$('cal').style.display='flex';return;}
+function route(){var p=location.hash.replace('#','');$('cal').hidden=!!p&&['logs','users','profile','thoughts','settings','integrations'].indexOf(p)>=0;var pg=$('pg');
+ if(['logs','users','profile','thoughts','settings','integrations'].indexOf(p)<0){pg.hidden=true;$('cal').hidden=false;$('cal').style.display='flex';return;}
  $('cal').style.display='none';pg.hidden=false;
- if(p==='logs')logs();else if(p==='thoughts')thoughts();else if(p==='users')users();else profile();}
+ if(p==='settings')settings();else if(p==='integrations')integrations();else if(p==='logs')logs();else if(p==='thoughts')thoughts();else if(p==='users')users();else profile();}
 function noteDate(v){var d=new Date(v);return isNaN(d)?'':d.toLocaleDateString('en-US',{month:'short',day:'numeric'});}
 function cleanNote(v){return String(v||'').replace(/\s*\(test\)/gi,'').replace(/Recorded from the current customer test conversation\.?/gi,'').trim();}
 function logs(){var pg=$('pg');pg.innerHTML=back()+'<h1>Information logs</h1><p class="fine">What we know about your business, from what you have told us.</p><p class="fine">Something wrong? Text us to confirm, change or remove an entry.</p><div id="lg"><p class="fine">Loading...</p></div>';
  $('pg').querySelector('h1').insertAdjacentHTML('afterend','<p class="fine">'+textUs()+'</p>');
  sb.from('info_notes').select('id,title,body,status,updated_at').order('updated_at',{ascending:false}).then(function(q){var l=(q.data||[]);
   $('lg').innerHTML=(q.error||!l.length)?'<p>Nothing here yet. We add what you tell us about your business as we go.</p>':l.map(function(x){return '<div class="note"><b>'+esc(cleanNote(x.title))+'</b><div>'+esc(cleanNote(x.body)).replace(/\n/g,'<br>')+'</div><small>Updated '+esc(noteDate(x.updated_at))+'</small></div>';}).join('');});}
-function back(){return '<a class="back-link" href="#">Back to calendar</a>';}
+function back(){return '<a class="back-link" href="#settings">Back to settings</a>';}
 function users(){var pg=$('pg');pg.innerHTML=back()+'<h1>Add users</h1><div class="price"><b>First account: $80/month</b><br><b>Each additional user: $60/month</b></div><p>Text us their name and number and we will set them up.</p><p class="fine">We will confirm with you before adding anyone. Billing is not live yet. Payment is not collected on this page.</p><p class="fine">'+textUs()+'</p>';}
 function profile(){var pg=$('pg'),n=(user.user_metadata&&user.user_metadata.full_name)||'';
  pg.innerHTML=back()+'<h1>Profile</h1><label>Email</label><p style="margin:2px 0 12px">'+esc(user.email)+'</p><label>Name</label><p class="profile-name">'+esc(n||"Not set")+'</p><p class="fine">Text us to change.</p><h2 style="margin-top:18px">Change password</h2><label for="pc">Current password</label><input id="pc" type="password" autocomplete="current-password"><label for="p1">New password (at least 10 characters)</label><input id="p1" type="password" autocomplete="new-password"><label for="p2">Repeat new password</label><input id="p2" type="password" autocomplete="new-password"><button class="btn" id="sp">Save password</button><p class="msg" id="pm"></p>';
@@ -118,7 +116,7 @@ function profile(){var pg=$('pg'),n=(user.user_metadata&&user.user_metadata.full
  var contact=document.createElement('p');contact.className='fine';contact.innerHTML=textUs();pg.insertBefore(contact,pg.querySelector('h2'));pg.insertBefore(appearance,pg.querySelector('h2'));$('appearance').value=breakerAppearance.get();$('appearance').onchange=function(){breakerAppearance.set(this.value);$('appearance-status').textContent='Appearance saved on this device.';};
  $('sp').onclick=function(){var a=$('p1').value,b=$('p2').value,c=$('pc').value,m=$('pm');m.className='msg bad';if(!c){m.textContent='Enter your current password.';return;}if(a.length<10){m.textContent='Use at least 10 characters.';return;}if(a!==b){m.textContent='The two passwords do not match.';return;}
   sb.auth.updateUser({password:a,current_password:c}).then(function(r){if(r.error){m.textContent=r.error.message||'Could not save. Try again.';}else{m.className='msg ok';m.textContent='Password saved.';$('pc').value='';$('p1').value='';$('p2').value='';}});};}
-$('mb').onclick=function(e){e.stopPropagation();$('mn').hidden=true;var h=$('mm').hidden;$('mm').hidden=!h;$('mb').setAttribute('aria-expanded',h);};
+$('mb').onclick=function(e){e.stopPropagation();var h=$('mm').hidden;$('mm').hidden=!h;$('mb').setAttribute('aria-expanded',h);};
 Array.prototype.forEach.call($('mm').querySelectorAll('[data-go]'),function(b){b.onclick=function(){go(b.dataset.go);};});
 window.addEventListener('hashchange',function(){if(user)route();});
 
@@ -126,7 +124,7 @@ window.addEventListener('hashchange',function(){if(user)route();});
 var thoughtRows=[];
 function thoughtDot(){var b=$('mb'),old=b.querySelector('.thought-dot');if(old)old.remove();if(thoughtRows.length){var dot=document.createElement('span');dot.className='thought-dot';dot.setAttribute('aria-label','Thought available');b.appendChild(dot);}}
 async function loadThoughts(){var q=await sb.from('business_thoughts').select('id,business_id,topic_key,title,body,evidence,evidence_count,created_at').order('created_at',{ascending:false}).limit(3);if(q.error){thoughtRows=[];thoughtDot();return false;}thoughtRows=q.data||[];thoughtDot();return true;}
-async function thoughts(){var pg=$('pg');pg.innerHTML=back()+'<h1>Thoughts</h1><div id="thought-content" aria-live="polite"><p class="fine">Loading...</p></div>';
+async function thoughts(){var pg=$('pg');pg.innerHTML='<a class="back-link" href="#">Back to calendar</a><h1>Thoughts</h1><div id="thought-content" aria-live="polite"><p class="fine">Loading...</p></div>';
  var ok=await loadThoughts();if(!document.getElementById('thought-content'))return;var box=$('thought-content');if(!ok){box.innerHTML='<p>Could not load Thoughts. Please try again.</p>';return;}
  if(!thoughtRows.length){box.innerHTML='<div class="thought-empty">Nothing new today.<p>If something&#39;s worth a thought, it&#39;ll show up here.</p><p>'+textUs()+'</p></div>';return;}
  box.innerHTML='<p class="fine">Things we noticed from what you have shared. Never more than three.</p>';
@@ -134,10 +132,13 @@ async function thoughts(){var pg=$('pg');pg.innerHTML=back()+'<h1>Thoughts</h1><
  sb.from('thought_feedback').select('verdict').eq('business_id',t.business_id).eq('topic_key',t.topic_key).maybeSingle().then(function(r){if(r.data)acts.querySelectorAll('button').forEach(function(b,i){b.setAttribute('aria-pressed',(i===0&&r.data.verdict==='like')?'true':'false');});});});
  var foot=document.createElement('p');foot.className='thought-foot';foot.textContent="Your answer helps us learn what's useful to you.";box.appendChild(foot);}
 
-$('out').onclick=function(){sb.auth.signOut().then(function(){location.replace('/login/');});};
+
+function settings(){ $('pg').innerHTML='<a class="back-link" href="#">Back to calendar</a><h1>Settings</h1><p class="settings-sub">Your account and connections.</p><div class="settings-group"><a class="settings-row" href="#logs">Information logs<span aria-hidden="true">&#8250;</span></a><a class="settings-row" href="#users">Add users<span aria-hidden="true">&#8250;</span></a><a class="settings-row" href="#profile">Profile<span aria-hidden="true">&#8250;</span></a></div><div class="settings-group"><a class="settings-row" href="#integrations">Integrations<span aria-hidden="true">&#8250;</span></a></div><button class="signout" type="button" onclick="signOut()">Sign out</button>'; }
+function integrations(){ $('pg').innerHTML=back()+'<h1>Integrations</h1><p class="settings-sub">Optional connections.</p><div class="settings-group"><div class="settings-row">Google Calendar<small>Not available yet</small></div><div class="settings-row">Outlook<small>Not available yet</small></div><div class="settings-row">Slack<small>Not available yet</small></div></div><p class="fine">We only read what you allow.</p>'; }
+function signOut(){sb.auth.signOut().then(function(){location.replace('/login/');});}
 sb.auth.getSession().then(function(r){
  if(!r.data.session){location.replace('/login/');return;}
- user=r.data.session.user;$('who').textContent=user.email;route();loadThoughts();
+ user=r.data.session.user;route();loadThoughts();
  sb.from('calendar_items').select('id,title,due_date,notes').order('due_date').then(function(q){items=q.data||[];render();});
 });
 render();
