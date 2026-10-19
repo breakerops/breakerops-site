@@ -8,3 +8,5 @@ begin
  return p_completed;
 end $$;
 grant execute on function public.set_calendar_completion(uuid,boolean) to service_role;
+
+grant select,update on public.calendar_items to service_role;
