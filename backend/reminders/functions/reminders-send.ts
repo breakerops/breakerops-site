@@ -37,7 +37,20 @@ function fitsReply(text: string): boolean {
 
 type SendResult = { ok: boolean; accepted?: boolean; providerId?: string; error?: string; uncertain?: boolean };
 
+function currentPreviewLinks(body: string): string {
+  return body.replace(/https:\/\/(?:www\.)?breakerops\.com(?:\/[^\s<>"']*)?/gi, (raw) => {
+    const suffix = raw.match(/[.,!;)]+$/)?.[0] || "";
+    const clean = suffix ? raw.slice(0, -suffix.length) : raw;
+    try {
+      const url = new URL(clean);
+      url.searchParams.set("v", "2");
+      return url.toString() + suffix;
+    } catch { return raw; }
+  });
+}
+
 async function sendVia(channel: string, to: string, body: string): Promise<SendResult> {
+  body = currentPreviewLinks(body);
   if (channel === "log") {
     console.log("REMINDER", to, body);
     return { ok: true, providerId: "log" };
