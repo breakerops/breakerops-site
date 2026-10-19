@@ -38,7 +38,7 @@ Deno.serve(async (req) => {
     // fire-and-forget desk notification; never blocks or fails the signup
     const note = fetch("https://formsubmit.co/ajax/nick@breakerops.com", {
       method: "POST",
-      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      headers: { "Content-Type": "application/json", Accept: "application/json", Referer: "https://www.breakerops.com/text/" },
       body: JSON.stringify({
         _subject: "New BreakerOps signup",
         phone: e164,
