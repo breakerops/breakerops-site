@@ -1,12 +1,15 @@
 // reminders-send: called every minute by pg_cron. Claims due reminders and
-// delivers them through one channel interface: log, email (Resend), sms (Twilio).
+// delivers them through one channel interface: log, email (Resend), sms (Telnyx).
 // Adding or swapping a channel touches only sendVia().
+// SMS config lives server-side in private.connections (provider 'telnyx': api key,
+// meta.from_number, optional meta.messaging_profile_id), entered at /admin.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SHARED_KEY = Deno.env.get("REMINDERS_KEY") ?? "";
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
+  { global: { headers: { "x-reminders-key": SHARED_KEY } } }
 );
 
 type SendResult = { ok: boolean; providerId?: string; error?: string; uncertain?: boolean };
@@ -35,19 +38,22 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
     }
   }
   if (channel === "sms") {
-    const sid = Deno.env.get("TWILIO_ACCOUNT_SID");
-    const token = Deno.env.get("TWILIO_AUTH_TOKEN");
-    const from = Deno.env.get("TWILIO_FROM");
-    if (!sid || !token || !from) return { ok: false, error: "sms provider not configured" };
+    const { data: rows, error: cerr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
+    const conn = rows?.[0];
+    if (cerr || !conn?.api_key) return { ok: false, error: "sms provider not configured" };
+    const from = conn.meta?.from_number;
+    if (!from) return { ok: false, error: "sms sender number not configured" };
     try {
-      const res = await fetch(`https://api.twilio.com/2010-04-01/Accounts/${sid}/Messages.json`, {
+      const payload: Record<string, string> = { from, to, text: body };
+      if (conn.meta?.messaging_profile_id) payload.messaging_profile_id = conn.meta.messaging_profile_id;
+      const res = await fetch("https://api.telnyx.com/v2/messages", {
         method: "POST",
-        headers: { Authorization: "Basic " + btoa(`${sid}:${token}`),
-                   "Content-Type": "application/x-www-form-urlencoded" },
-        body: new URLSearchParams({ From: from, To: to, Body: body }),
+        headers: { Authorization: `Bearer ${conn.api_key}`, "Content-Type": "application/json" },
+        body: JSON.stringify(payload),
       });
-      if (res.ok) return { ok: true, providerId: (await res.json()).sid };
-      return { ok: false, error: `twilio ${res.status}` };
+      const j = await res.json().catch(() => ({}));
+      if (res.ok) return { ok: true, providerId: j?.data?.id };
+      return { ok: false, error: `telnyx ${res.status}: ${JSON.stringify(j?.errors ?? j).slice(0, 300)}` };
     } catch (e) {
       return { ok: false, uncertain: true, error: String(e) };
     }
