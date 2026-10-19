@@ -31,6 +31,10 @@ button.ghost{background:transparent;color:var(--fg);border-color:var(--border);f
 .msg.err{color:#b3261e}
 .foot{font-size:13px;color:var(--muted);margin:44px 0 30px}
 [hidden]{display:none}
+table.su{width:100%;border-collapse:collapse;font-size:14px;margin-top:6px}
+table.su td{padding:8px 6px;border-top:1px solid var(--border);vertical-align:top}
+table.su td.t{color:var(--muted);white-space:nowrap}
+.c{font-size:12px;color:var(--muted);margin-top:2px}
 </style></head><body>
 <header><div class="wrap"><div class="brand">Breaker<span>Ops</span></div><div class="biz">Admin</div></div></header>
 <main><div class="wrap">
@@ -117,6 +121,12 @@ button.ghost{background:transparent;color:var(--fg);border-color:var(--border);f
 </div>
 <p class="note" id="u-line"></p>
 </div>
+<h1>Signups</h1>
+<p class="sub">Everyone who left their number on the site, newest first. Nothing texts them yet.</p>
+<div class="card">
+<p class="status" id="s-signups">Loading...</p>
+<div id="signups"></div>
+</div>
 <p class="foot">Signed in as <span id="who"></span>. <a href="#" id="signout" style="color:var(--muted)">Sign out</a></p>
 </div>
 
@@ -170,7 +180,26 @@ function showApp(session){
  if(em!==OWNER){sb.auth.signOut();err('autherr','Owner access only.');return;}
  $('auth').hidden=true;$('newpw').hidden=true;$('app').hidden=false;
  $('who').textContent=session.user.email;
- loadStatus();loadUsage();loadModel();
+ loadStatus();loadUsage();loadModel();loadSignups();
+}
+
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+
+function loadSignups(){
+ sb.rpc('signups_list').then(function(r){
+  var e=$('s-signups'),box=$('signups');
+  if(r.error){e.textContent='Could not load signups.';return;}
+  var rows=r.data||[];
+  if(!rows.length){e.textContent='No signups yet.';return;}
+  e.textContent=rows.length+' signup'+(rows.length===1?'':'s')+' so far.';
+  var h='<table class="su">';
+  rows.forEach(function(x){
+   var d=new Date(x.created_at);
+   var when=d.toLocaleString('en-US',{month:'short',day:'numeric',hour:'numeric',minute:'2-digit'});
+   h+='<tr><td class="t">'+when+'</td><td>'+esc(x.phone)+'<div class="c">'+esc(x.consent_text)+'</div></td><td>'+esc(x.source)+'</td></tr>';
+  });
+  box.innerHTML=h+'</table>';
+ });
 }
 
 function findRow(rows,p){return (rows||[]).find(function(x){return x.provider===p;});}
