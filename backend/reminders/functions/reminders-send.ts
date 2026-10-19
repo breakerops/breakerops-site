@@ -38,7 +38,7 @@ function fitsReply(text: string): boolean {
 type SendResult = { ok: boolean; accepted?: boolean; providerId?: string; error?: string; uncertain?: boolean };
 
 function currentPreviewLinks(body: string): string {
-  return body.replace(/\b(?:https?:\/\/)?(?:www\.)?breakerops\.com(?:\/[^\s<>"']*)?/gi, (raw) => {
+  return body.replace(/(?<![\w@./-])(?:https?:\/\/)?(?:www\.)?breakerops\.com(?![\w.-])(?:\/[^\s<>"']*)?/gi, (raw) => {
     const suffix = raw.match(/[.,!;)]+$/)?.[0] || "";
     const clean = suffix ? raw.slice(0, -suffix.length) : raw;
     try {
