@@ -1,0 +1,204 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Admin | BreakerOps</title><meta name="robots" content="noindex,nofollow">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><meta name="theme-color" content="#111111">
+<style>
+*{box-sizing:border-box}
+:root{--bg:#fff;--fg:#111;--muted:#595959;--border:#d8d8dc}
+@media (prefers-color-scheme: dark){:root{--bg:#171717;--fg:#e8e8ed;--muted:#aaaab0;--border:#3a3a3c}}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.wrap{max-width:720px;margin:0 auto;padding:0 22px}
+header{padding:18px 0}
+.brand{font-weight:800;letter-spacing:-.02em;font-size:20px}
+.brand span{font-weight:400}
+.biz{font-size:14px;color:var(--muted);margin-top:2px}
+h1{font-size:28px;letter-spacing:-.02em;margin:26px 0 4px}
+.sub{font-size:14px;color:var(--muted);margin:0 0 18px}
+.card{border:1px solid var(--border);border-radius:12px;padding:18px;margin:0 0 16px}
+.card h2{font-size:18px;margin:0 0 2px}
+.status{font-size:14px;color:var(--muted);margin:0 0 12px}
+.status.ok{color:#16703a}
+label{display:block;font-size:14px;color:var(--muted);margin:10px 0 4px}
+input[type=email],input[type=password],input[type=text]{width:100%;padding:10px 12px;font-size:16px;border:1px solid var(--border);border-radius:8px;background:var(--bg);color:var(--fg)}
+button{margin-top:12px;padding:10px 18px;font-size:15px;font-weight:600;border:1px solid var(--fg);border-radius:8px;background:var(--fg);color:var(--bg);cursor:pointer}
+button.ghost{background:transparent;color:var(--fg);border-color:var(--border);font-weight:500}
+.note{font-size:14px;color:var(--muted);margin:8px 0 0}
+.row{display:flex;gap:16px;flex-wrap:wrap}
+.kv{flex:1;min-width:140px}
+.kv b{display:block;font-size:22px;letter-spacing:-.01em}
+.kv small{color:var(--muted);font-size:13px}
+.msg{font-size:14px;margin-top:10px}
+.msg.err{color:#b3261e}
+.foot{font-size:13px;color:var(--muted);margin:44px 0 30px}
+[hidden]{display:none}
+</style></head><body>
+<header><div class="wrap"><div class="brand">Breaker<span>Ops</span></div><div class="biz">Admin</div></div></header>
+<main><div class="wrap">
+
+<div id="auth">
+<h1>Sign in</h1>
+<p class="sub">Owner access only.</p>
+<div class="card">
+<label for="email">Email</label>
+<input id="email" type="email" autocomplete="username" value="jake@breakerops.com">
+<label for="pw">Password</label>
+<input id="pw" type="password" autocomplete="current-password">
+<button id="signin">Sign in</button>
+<button id="reset" class="ghost">Set or reset my password</button>
+<p class="msg err" id="autherr" hidden></p>
+<p class="msg" id="authnote" hidden></p>
+</div>
+</div>
+
+<div id="newpw" hidden>
+<h1>Choose your password</h1>
+<p class="sub">You came here from your reset email. Pick a password only you know.</p>
+<div class="card">
+<label for="pw1">New password</label>
+<input id="pw1" type="password" autocomplete="new-password">
+<label for="pw2">Repeat it</label>
+<input id="pw2" type="password" autocomplete="new-password">
+<button id="savepw">Save password</button>
+<p class="msg err" id="pwerr" hidden></p>
+</div>
+</div>
+
+<div id="app" hidden>
+<h1>Connections</h1>
+<p class="sub">Keys are stored server-side and never shown again. Saving a new key replaces the old one.</p>
+
+<div class="card">
+<h2>Telnyx</h2>
+<p class="status" id="s-telnyx">Checking...</p>
+<label for="k-telnyx">API key</label>
+<input id="k-telnyx" type="password" autocomplete="off" placeholder="Enter key">
+<button class="save" data-p="telnyx" data-k="k-telnyx">Save Telnyx key</button>
+<p class="note">The send path is being built. The key will be picked up when texting goes live.</p>
+<p class="msg" id="m-telnyx"></p>
+</div>
+
+<div class="card">
+<h2>Model provider</h2>
+<p class="status" id="s-model">Checking...</p>
+<label for="k-model">API key</label>
+<input id="k-model" type="password" autocomplete="off" placeholder="Enter key">
+<button class="save" data-p="model" data-k="k-model">Save model key</button>
+<p class="note">Today the engine runs through the built-in Instinct path. A saved key here is where a direct provider account will plug in.</p>
+<p class="msg" id="m-model"></p>
+</div>
+
+<div class="card">
+<h2>Stripe</h2>
+<p class="status">Slot reserved</p>
+<label for="k-stripe">Secret key</label>
+<input id="k-stripe" type="password" autocomplete="off" placeholder="Coming after the LLC is set up" disabled>
+<p class="note">Payments wait on the LLC. When it is time, the key goes here and checkout gets wired up.</p>
+</div>
+
+<h1>Usage and plan</h1>
+<p class="sub">This month, against the current plan.</p>
+<div class="card" id="usagecard">
+<div class="row">
+<div class="kv"><b id="u-used">-</b><small>texts sent this month</small></div>
+<div class="kv"><b id="u-plan">-</b><small>included in plan</small></div>
+<div class="kv"><b id="u-over">-</b><small>overage texts</small></div>
+</div>
+<p class="note" id="u-line"></p>
+</div>
+<p class="foot">Signed in as <span id="who"></span>. <a href="#" id="signout" style="color:var(--muted)">Sign out</a></p>
+</div>
+
+</div></main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var OWNER='jake@breakerops.com';
+var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
+var $=function(id){return document.getElementById(id);};
+function err(id,msg){var e=$(id);e.textContent=msg||'';e.hidden=!msg;}
+
+sb.auth.onAuthStateChange(function(ev,session){
+ if(ev==='PASSWORD_RECOVERY'){$('auth').hidden=true;$('app').hidden=true;$('newpw').hidden=false;return;}
+ if(session){showApp(session);}
+ else{$('auth').hidden=false;$('app').hidden=true;$('newpw').hidden=true;}
+});
+
+$('signin').onclick=function(){
+ err('autherr');
+ sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('pw').value}).then(function(r){
+  if(r.error)err('autherr',r.error.message);
+ });
+};
+
+$('reset').onclick=function(){
+ err('autherr');err('authnote');
+ sb.auth.resetPasswordForEmail($('email').value.trim(),{redirectTo:'https://www.breakerops.com/admin/'}).then(function(r){
+  if(r.error){err('autherr',r.error.message);}
+  else{var n=$('authnote');n.textContent='Check your email for a secure link to set your password.';n.hidden=false;}
+ });
+};
+
+$('savepw').onclick=function(){
+ err('pwerr');
+ var a=$('pw1').value,b=$('pw2').value;
+ if(a.length<10){err('pwerr','Use at least 10 characters.');return;}
+ if(a!==b){err('pwerr','They do not match.');return;}
+ sb.auth.updateUser({password:a}).then(function(r){
+  if(r.error){err('pwerr',r.error.message);return;}
+  sb.auth.getSession().then(function(s){if(s.data.session)showApp(s.data.session);});
+ });
+};
+
+function showApp(session){
+ var em=(session.user.email||'').toLowerCase();
+ if(em!==OWNER){sb.auth.signOut();err('autherr','Owner access only.');return;}
+ $('auth').hidden=true;$('newpw').hidden=true;$('app').hidden=false;
+ $('who').textContent=session.user.email;
+ loadStatus();loadUsage();
+}
+
+function statText(el,row){
+ var e=$(el);
+ if(!row){e.textContent='No key saved yet.';e.className='status';return;}
+ if(row.connected){e.textContent='Key saved ('+row.key_hint+')';e.className='status ok';}
+ else{e.textContent='No key saved yet.';e.className='status';}
+}
+
+function loadStatus(){
+ sb.rpc('connection_status').then(function(r){
+  if(r.error){statText('s-telnyx');statText('s-model');return;}
+  var rows=r.data||[];
+  statText('s-telnyx',rows.find(function(x){return x.provider==='telnyx';}));
+  statText('s-model',rows.find(function(x){return x.provider==='model';}));
+ });
+}
+
+function loadUsage(){
+ sb.rpc('admin_overview').then(function(r){
+  if(r.error||!r.data){$('u-line').textContent='Could not load usage right now.';return;}
+  var d=r.data,plan=d.plan||{},rows=d.usage||[];
+  var now=new Date();
+  var ym=now.getFullYear()+'-'+String(now.getMonth()+1).padStart(2,'0');
+  var m=rows.find(function(x){return String(x.month||'').slice(0,7)===ym;})||rows[0]||{};
+  $('u-used').textContent=(m.texts!=null?m.texts:0);
+  $('u-plan').textContent=(plan.plan_texts!=null?plan.plan_texts:'-');
+  $('u-over').textContent=(m.overage_texts!=null?m.overage_texts:0);
+  var pc=(plan.plan_price_cents/100).toFixed(0),au=(plan.addon_user_cents/100).toFixed(0),oc=(plan.overage_cents||0);
+  $('u-line').textContent='Plan: $'+pc+'/month includes '+(plan.plan_texts||0).toLocaleString()+' texts account-wide. Extra users $'+au+'/month each. Overage '+oc+' cents per text.';
+ });
+}
+
+Array.prototype.forEach.call(document.querySelectorAll('button.save'),function(b){
+ b.onclick=function(){
+  var p=b.getAttribute('data-p'),kid=b.getAttribute('data-k');
+  var key=$(kid).value.trim();
+  var m=$('m-'+p);m.textContent='';m.className='msg';
+  if(!key){m.textContent='Enter a key first.';m.className='msg err';return;}
+  sb.rpc('set_connection',{p_provider:p,p_key:key}).then(function(r){
+   if(r.error){m.textContent=r.error.message;m.className='msg err';}
+   else{m.textContent='Saved.';$(kid).value='';loadStatus();}
+  });
+ };
+});
+
+$('signout').onclick=function(e){e.preventDefault();sb.auth.signOut();};
+</script></body></html>
