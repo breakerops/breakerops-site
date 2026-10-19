@@ -10,13 +10,14 @@ create table if not exists public.reminders (
   send_at timestamptz not null,               -- absolute time, offset required
   idempotency_key text not null check (length(trim(idempotency_key)) > 0),
   status text not null default 'pending'
-    check (status in ('pending','claimed','sent','failed','uncertain','cancelled')),
+    check (status in ('pending','claimed','accepted','sent','failed','uncertain','cancelled')),
   attempts integer not null default 0,
   provider_id text,
   error text,
   created_by text not null,                   -- which conversation backend wrote it, e.g. 'instinct-matt'
   created_at timestamptz not null default now(),
   sent_at timestamptz,
+  accepted_at timestamptz,                    -- set when the provider accepts; webhook moves it to sent/failed
   unique (business_id, idempotency_key)
 );
 
