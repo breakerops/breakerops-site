@@ -1,0 +1,65 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Text us | BreakerOps</title>
+<meta name="description" content="Enter your mobile number and BreakerOps will text you to get set up. No app - plain text.">
+<meta name="theme-color" content="#171717">
+<link rel="icon" href="/favicon.svg" type="image/svg+xml"><link rel="icon" href="/favicon.ico" sizes="32x32">
+<style>
+*{box-sizing:border-box}
+:root{--bg:#171717;--fg:#e8e8ed;--muted:#9a9aa0;--border:#3a3a3c;--blue:#6b9bff}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.wrap{max-width:520px;margin:0 auto;padding:0 22px}
+header{padding:18px 0}
+.brand{font-weight:800;letter-spacing:-.02em;font-size:20px;text-decoration:none;color:var(--fg)}
+.brand span{font-weight:400}
+h1{font-size:clamp(30px,6vw,42px);line-height:1.12;letter-spacing:-.02em;margin:56px 0 12px}
+.sub{font-size:20px;color:var(--muted);margin:0 0 34px}
+.phone{font:inherit;font-size:22px;width:100%;padding:16px 18px;border:1px solid var(--border);border-radius:10px;background:#1e1e20;color:var(--fg);margin:0 0 16px}
+.phone:focus{outline:none;border-color:var(--blue)}
+.consent{font-size:15px;color:var(--muted);margin:0 0 28px}
+.consent a{color:var(--blue)}
+.btn{display:block;width:100%;background:var(--fg);color:var(--bg);border:1px solid var(--fg);border-radius:10px;padding:16px 0;font:inherit;font-size:20px;font-weight:600;cursor:pointer;text-align:center}
+.btn .arr{color:var(--blue);font-weight:700}
+.btn[disabled]{opacity:.5}
+.st{font-size:14px;color:var(--muted);margin:12px 0 0;min-height:20px}
+.ok{font-size:20px;font-weight:600;margin:40px 0 0}
+.ok .b{color:var(--blue)}
+.hp{position:absolute;left:-9999px}
+footer{margin:80px 0 30px;font-size:13px;color:var(--muted);border-top:1px solid var(--border);padding-top:16px}
+footer a{color:var(--blue)}
+</style></head><body>
+<header><div class="wrap"><a class="brand" href="/">Breaker<span>Ops</span></a></div></header>
+<main><div class="wrap">
+<h1>Text us.</h1>
+<p class="sub">Leave your number and we'll text you to get set up.</p>
+<form id="f" novalidate>
+<input type="tel" id="ph" class="phone" aria-label="Your mobile number" placeholder="+1 (555) 000-0000" autocomplete="tel">
+<input type="text" id="hp" class="hp" tabindex="-1" autocomplete="off" aria-hidden="true">
+<p class="consent">By clicking "Get started", I agree to BreakerOps's <a href="/terms/">Terms of Service</a> and <a href="/sms-terms/">SMS Terms</a>, and acknowledge the <a href="/privacy/">Privacy Policy</a>.</p>
+<button class="btn" type="submit" id="go">Get started <span class="arr">&gt;</span></button>
+<p id="st" class="st" role="status"></p>
+</form>
+<p id="done" class="ok" hidden>Got it. We'll text <span class="b" id="to"></span> to get you set up. Nothing starts until you reply yes.</p>
+</div></main>
+<footer><div class="wrap">BreakerOps &middot; <a href="mailto:matt@breakerops.com">matt@breakerops.com</a></div></footer>
+<script>
+(function(){
+var f=document.getElementById('f'),st=document.getElementById('st'),go=document.getElementById('go');
+var CONSENT='By clicking "Get started", I agree to BreakerOps\'s Terms of Service and SMS Terms, and acknowledge the Privacy Policy.';
+f.addEventListener('submit',function(e){e.preventDefault();
+ if(document.getElementById('hp').value)return;
+ var ph=document.getElementById('ph').value.trim();
+ var d=ph.replace(/[^0-9]/g,'');
+ if(d.length===11&&d.charAt(0)==='1')d=d.slice(1);
+ if(!/^[2-9][0-9]{9}$/.test(d)){st.textContent='Add your mobile number so we can text you.';return;}
+ go.disabled=true;st.textContent='Sending...';
+ fetch('https://euchkgnqxycqzgamucry.supabase.co/functions/v1/signup',{method:'POST',headers:{'Content-Type':'application/json','apikey':'sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne'},
+  body:JSON.stringify({phone:'+1'+d,consent:CONSENT,source:'breakerops.com /text',hp:''})})
+ .then(function(r){return r.json().then(function(j){return {r:r,j:j};});}).then(function(x){
+  if(x.r.ok&&x.j&&x.j.ok){f.hidden=true;document.getElementById('to').textContent='+1'+d;document.getElementById('done').hidden=false;}
+  else{go.disabled=false;st.textContent=(x.j&&x.j.error)?x.j.error:'That did not go through. Please try again.';}
+ }).catch(function(){go.disabled=false;st.textContent='That did not go through. Please try again.';});
+});
+})();
+</script>
+</body></html>
