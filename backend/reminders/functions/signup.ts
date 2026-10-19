@@ -1,6 +1,8 @@
 // signup: public website signup. Stores a phone number + the exact consent text
-// shown, nothing else. Sends nothing - texting starts only after Telnyx is live
-// and onboarding is confirmed. No auth (public form); honeypot + shape checks only.
+// shown, nothing else. Sends nothing to the customer - texting starts only after
+// Telnyx is live and onboarding is confirmed. No auth (public form); honeypot +
+// shape checks only. Notifies the desk email (fire-and-forget) so the team can
+// relay new signups.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const CORS = {
@@ -26,12 +28,26 @@ Deno.serve(async (req) => {
     const e164 = digits.length === 10 ? "+1" + digits : digits.length === 11 && digits.startsWith("1") ? "+" + digits : null;
     if (!e164) return json({ error: "Enter a valid US mobile number." }, 400);
     if (!p.consent) return json({ error: "missing consent" }, 400);
+    const source = String(p.source || "breakerops.com").slice(0, 100);
     const { error } = await supabase.from("signups").insert({
       phone: e164,
       consent_text: String(p.consent).slice(0, 500),
-      source: String(p.source || "breakerops.com").slice(0, 100),
+      source,
     });
     if (error) return json({ error: error.message }, 500);
+    // fire-and-forget desk notification; never blocks or fails the signup
+    const note = fetch("https://formsubmit.co/ajax/nick@breakerops.com", {
+      method: "POST",
+      headers: { "Content-Type": "application/json", Accept: "application/json" },
+      body: JSON.stringify({
+        _subject: "New BreakerOps signup",
+        phone: e164,
+        source,
+        time: new Date().toISOString(),
+        _template: "table",
+      }),
+    }).catch(() => {});
+    try { (globalThis as any).EdgeRuntime?.waitUntil?.(note); } catch (_) { /* ignore */ }
     return json({ ok: true }, 201);
   } catch (e) {
     return json({ error: String(e) }, 500);
