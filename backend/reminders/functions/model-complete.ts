@@ -18,6 +18,25 @@ function json(b: unknown, s = 200) {
   return new Response(JSON.stringify(b), { status: s, headers: { "Content-Type": "application/json" } });
 }
 
+// One reply envelope, no application-level SMS fan-out. Preserve all facts:
+// if it will exceed two SMS segments, reject for rewriting; never truncate.
+function mergeReply(value: any): string {
+  if (Array.isArray(value)) return value.map(mergeReply).filter(Boolean).join(" ");
+  if (value && typeof value === "object") return mergeReply(value.text ?? value.content ?? value.messages ?? "");
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+function fitsReply(text: string): boolean {
+  const gsm = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
+  const ext = "^{}\\[~]|€";
+  let units = 0;
+  for (const char of text) {
+    if (gsm.includes(char)) units++;
+    else if (ext.includes(char)) units += 2;
+    else return text.length <= 134; // 2 concatenated UCS-2 segments
+  }
+  return units <= 306; // 2 concatenated GSM-7 segments
+}
+
 Deno.serve(async (req) => {
   if (!SHARED_KEY || req.headers.get("x-reminders-key") !== SHARED_KEY) {
     return json({ error: "unauthorized" }, 401);
@@ -39,8 +58,10 @@ Deno.serve(async (req) => {
 
     const base = (m.endpoint || "").replace(/\/+$/, "");
     const url = base.endsWith("/chat/completions") ? base : base + "/chat/completions";
-    const messages = [];
-    if (p.system) messages.push({ role: "system", content: p.system });
+    const messages = [{ role: "system", content: [
+      "You are BreakerOps. Reduce the customer's upkeep. Reply with ONE concise text, never a burst. Use at most two SMS segments only when necessary (306 GSM-7 characters or 134 Unicode UTF-16 units). Prefer short plain ASCII. No filler, repeated acknowledgements, or separate sign-offs. Preserve names, dates, amounts and required safety/consent wording. Return only the reply text, never an array of messages. Brief: Today: <key items or day link>. Reminder: <task> - <time if provided>. Do not invent missing details.",
+      p.system || ""
+    ].join("\n") }];
     messages.push({ role: "user", content: p.prompt });
 
     let res: Response;
@@ -51,7 +72,7 @@ Deno.serve(async (req) => {
         body: JSON.stringify({
           model: m.model,
           messages,
-          max_tokens: p.max_tokens ?? 800,
+          max_tokens: Math.min(Number(p.max_tokens) || 120, 160),
           ...(p.temperature != null ? { temperature: p.temperature } : {}),
         }),
       });
@@ -60,8 +81,14 @@ Deno.serve(async (req) => {
     }
     const j = await res.json().catch(() => ({}));
     if (!res.ok) return json({ error: `provider ${res.status}: ${JSON.stringify(j).slice(0, 300)}`, active: m.name }, 502);
+    const text = mergeReply(j?.choices?.[0]?.message?.content ?? "");
+    if (j?.choices?.[0]?.finish_reason === "length" || !text || !fitsReply(text)) {
+      return json({ error: "reply_needs_shortening", detail: "Rewrite as one concise reply, at most two SMS segments; nothing sent.", active: m.name }, 422);
+    }
     return json({
-      text: j?.choices?.[0]?.message?.content ?? "",
+      text,
+      messages: [text],
+      message_count: 1,
       provider: m.name,
       model: m.model,
       usage: j?.usage ?? null,

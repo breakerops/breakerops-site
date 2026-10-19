@@ -24,3 +24,16 @@ Living product doc (decisions, rules, benchmark): https://docs.google.com/docume
 - `functions/model-complete.ts` — one endpoint for product-side text generation. The active provider is data (the `model_providers.active` row), not code. `manual` (instinct) returns 409 so callers keep the concierge path; `openai_compatible` posts to `{endpoint}/chat/completions` with the key saved in private.connections under the provider's name. Secured with the shared x-reminders-key.
 - The owner picks the provider and saves keys at breakerops.com/admin (set_active_model / set_connection, owner-uid gated).
 - `admin.sql` — the /admin page backend: private.connections (keys + non-secret meta), owner-gated set/status/overview functions, and the shared-key-gated server reads the edge functions use.
+
+## Concise customer replies (2026-10-19)
+
+One concise reply, never a burst. The adapter merges content parts and returns
+one message. SMS write/send reject bodies over two SMS segments (306 GSM-7
+septets or 134 UTF-16 units); they do not truncate or silently split replies.
+The model prompt requests brief reminders (`<task> - <time>`) and daily briefs
+use `Today: <day link>`. Concierge replies follow the same rule.
+
+The current queue has one provider request per reminder row, not a global
+conversation-reply cap. Before adding a multi-message conversation adapter,
+add a stable reply_id and unique enqueue key to prevent one reply being queued
+as multiple independent rows. Do not merge unrelated reminders by time bucket.

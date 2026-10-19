@@ -16,6 +16,25 @@ const supabase = createClient(
   { global: { headers: { "x-reminders-key": SHARED_KEY } } }
 );
 
+// One reply envelope, no application-level SMS fan-out. Preserve all facts:
+// if it will exceed two SMS segments, reject for rewriting; never truncate.
+function mergeReply(value: any): string {
+  if (Array.isArray(value)) return value.map(mergeReply).filter(Boolean).join(" ");
+  if (value && typeof value === "object") return mergeReply(value.text ?? value.content ?? value.messages ?? "");
+  return String(value ?? "").replace(/\s+/g, " ").trim();
+}
+function fitsReply(text: string): boolean {
+  const gsm = "@£$¥èéùìòÇ\nØø\rÅåΔ_ΦΓΛΩΠΨΣΘΞÆæßÉ !\"#¤%&'()*+,-./0123456789:;<=>?¡ABCDEFGHIJKLMNOPQRSTUVWXYZÄÖÑÜ§¿abcdefghijklmnopqrstuvwxyzäöñüà";
+  const ext = "^{}\\[~]|€";
+  let units = 0;
+  for (const char of text) {
+    if (gsm.includes(char)) units++;
+    else if (ext.includes(char)) units += 2;
+    else return text.length <= 134; // 2 concatenated UCS-2 segments
+  }
+  return units <= 306; // 2 concatenated GSM-7 segments
+}
+
 type SendResult = { ok: boolean; accepted?: boolean; providerId?: string; error?: string; uncertain?: boolean };
 
 async function sendVia(channel: string, to: string, body: string): Promise<SendResult> {
@@ -42,6 +61,8 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
     }
   }
   if (channel === "sms") {
+    body = mergeReply(body);
+    if (!body || !fitsReply(body)) return { ok: false, error: "reply_needs_shortening: one reply, at most two SMS segments; nothing sent" };
     const { data: rows, error: cerr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
     const conn = rows?.[0];
     if (cerr || !conn?.api_key) return { ok: false, error: "sms provider not configured" };
