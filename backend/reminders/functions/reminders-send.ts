@@ -3,6 +3,10 @@
 // Adding or swapping a channel touches only sendVia().
 // SMS config lives server-side in private.connections (provider 'telnyx': api key,
 // meta.from_number, optional meta.messaging_profile_id), entered at /admin.
+// SMS truth: a Telnyx 200 only means the API accepted the message. Carrier
+// rejections (unregistered sender, no 10DLC campaign attached) arrive later on
+// the delivery webhook, so sms rows go to "accepted" until telnyx-webhook
+// confirms. Rows stuck "accepted" over 15 minutes are swept to "uncertain".
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SHARED_KEY = Deno.env.get("REMINDERS_KEY") ?? "";
@@ -12,7 +16,7 @@ const supabase = createClient(
   { global: { headers: { "x-reminders-key": SHARED_KEY } } }
 );
 
-type SendResult = { ok: boolean; providerId?: string; error?: string; uncertain?: boolean };
+type SendResult = { ok: boolean; accepted?: boolean; providerId?: string; error?: string; uncertain?: boolean };
 
 async function sendVia(channel: string, to: string, body: string): Promise<SendResult> {
   if (channel === "log") {
@@ -52,7 +56,8 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
         body: JSON.stringify(payload),
       });
       const j = await res.json().catch(() => ({}));
-      if (res.ok) return { ok: true, providerId: j?.data?.id };
+      // 200 = accepted by Telnyx, NOT delivered. telnyx-webhook finalizes.
+      if (res.ok) return { ok: true, accepted: true, providerId: j?.data?.id };
       return { ok: false, error: `telnyx ${res.status}: ${JSON.stringify(j?.errors ?? j).slice(0, 300)}` };
     } catch (e) {
       return { ok: false, uncertain: true, error: String(e) };
@@ -65,6 +70,14 @@ Deno.serve(async (req) => {
   if (!SHARED_KEY || req.headers.get("x-reminders-key") !== SHARED_KEY) {
     return Response.json({ error: "unauthorized" }, { status: 401 });
   }
+  // Sweep: sms rows the carrier never finalized within 15 minutes. Held for
+  // review like other uncertain outcomes - never silently retried.
+  const cutoff = new Date(Date.now() - 15 * 60 * 1000).toISOString();
+  await supabase.from("reminders")
+    .update({ status: "uncertain", error: "no carrier delivery confirmation within 15 minutes" })
+    .eq("status", "accepted")
+    .lt("accepted_at", cutoff);
+
   const { data: due, error } = await supabase.rpc("claim_due_reminders", { batch_size: 25 });
   if (error) return Response.json({ error: error.message }, { status: 500 });
 
@@ -72,7 +85,9 @@ Deno.serve(async (req) => {
   for (const r of due ?? []) {
     const out = await sendVia(r.recipient_channel, r.recipient, r.body);
     const patch = out.ok
-      ? { status: "sent", provider_id: out.providerId, sent_at: new Date().toISOString(), error: null }
+      ? out.accepted
+        ? { status: "accepted", provider_id: out.providerId, accepted_at: new Date().toISOString(), error: null }
+        : { status: "sent", provider_id: out.providerId, sent_at: new Date().toISOString(), error: null }
       : out.uncertain
         ? { status: "uncertain", error: out.error }   // held for review, never silently retried
         : { status: "failed", error: out.error };
