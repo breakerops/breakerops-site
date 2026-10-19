@@ -5,7 +5,6 @@ alter table public.calendar_weekly_series enable row level security;
 revoke all on public.calendar_weekly_series from anon, authenticated;
 insert into public.calendar_weekly_series values ('665ur5il9fdrvdcn2jrr0dom1k','80f2d1a2-7634-40e8-abf6-904e0aae73b4','c91e6dbc-7cba-479d-8c8d-ea2ffd84967e','BreakerOps Friday scorecard','2026-10-23','07:00:00','Weekly one-glance BreakerOps numbers from Instinct (right after the 7 AM daily check).
 Repeats weekly. Ends at 07:30 CT. Source: https://www.google.com/calendar/event?eid=NjY1dXI1aWw5ZmRydmRjbjJqcnIwZG9tMWtfMjAyNjEwMjNUMTIwMDAwWiBtb3JlanVpY2VsbGNAbQ&authuser=morejuicellc%40gmail.com') on conflict (id) do nothing;
-insert into public.calendar_weekly_series values ('5h2ee9t3baaca676mcqosbq2n0','80f2d1a2-7634-40e8-abf6-904e0aae73b4','c91e6dbc-7cba-479d-8c8d-ea2ffd84967e','More Juice - LinkedIn Post','2026-08-10',NULL,'
 Repeats weekly. Source: https://www.google.com/calendar/event?eid=NWgyZWU5dDNiYWFjYTY3Nm1jcW9zYnEybjBfMjAyNjA4MTAgMGI0YTY3ZDdjMWFhZGVjMTZmZWU4MDM3NjJmM2U4YWE5ZjQxYWFlYTIzNmUyMjNiYmFlMjUxMDdkOWIxZjQ2MUBn&authuser=morejuicellc%40gmail.com') on conflict (id) do nothing;
 insert into public.calendar_weekly_series values ('lp24b4vur7qe15vl45gkk1bomg','80f2d1a2-7634-40e8-abf6-904e0aae73b4','c91e6dbc-7cba-479d-8c8d-ea2ffd84967e','More Juice - Team Meeting','2026-06-01','18:30:00','
 Repeats weekly. Ends at 19:00 CT. Join: https://meet.google.com/pgh-nseg-imn
