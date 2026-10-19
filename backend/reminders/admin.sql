@@ -31,3 +31,43 @@ create or replace function admin_overview() returns json language sql security d
 $$ select case when is_admin() then json_build_object(
   'plan',(select row_to_json(b) from (select name,plan_texts,overage_cents,plan_price_cents,addon_user_cents from businesses limit 1) b),
   'usage',(select coalesce(json_agg(row_to_json(v)),'[]'::json) from v_usage_billing v)) else null end $$;
+
+-- v2 (Oct 18, 2026): meta merge for sender number / messaging profile; server-side reads for
+-- edge functions guarded by the shared reminders key header; model provider swap.
+
+create or replace function set_connection(p_provider text, p_key text default null, p_meta jsonb default null) returns void language plpgsql security definer as $$ begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  insert into private.connections (provider, api_key, meta, updated_by, updated_at)
+  values (p_provider, p_key, coalesce(p_meta,'{}'::jsonb), auth.uid(), now())
+  on conflict (provider) do update set
+    api_key = coalesce(excluded.api_key, connections.api_key),
+    meta = case when p_meta is null then connections.meta else connections.meta || excluded.meta end,
+    updated_by = excluded.updated_by, updated_at = now();
+end $$;
+
+drop function if exists connection_status();
+create or replace function connection_status() returns table(provider text, connected boolean, key_hint text, meta jsonb, updated_at timestamptz) language plpgsql security definer as $$ begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  return query select c.provider, c.api_key is not null and c.api_key<>'', '...'||right(c.api_key,4), c.meta, c.updated_at from private.connections c;
+end $$;
+
+create or replace function get_connection(p_provider text) returns table(api_key text, meta jsonb) language plpgsql security definer as $$ begin
+  if (select value from private.config where key='reminders_key') is distinct from current_setting('request.headers',true)::json->>'x-reminders-key' then raise exception 'not allowed'; end if;
+  return query select c.api_key, c.meta from private.connections c where c.provider = p_provider;
+end $$;
+
+create or replace function get_active_model() returns table(name text, kind text, endpoint text, model text) language plpgsql security definer as $$ begin
+  if (select value from private.config where key='reminders_key') is distinct from current_setting('request.headers',true)::json->>'x-reminders-key' then raise exception 'not allowed'; end if;
+  return query select m.name, m.kind, m.endpoint, m.model from model_providers m where m.active;
+end $$;
+
+create or replace function set_active_model(p_name text, p_kind text, p_endpoint text default null, p_model text default null) returns void language plpgsql security definer as $$ begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  if p_kind not in ('manual','openai_compatible') then raise exception 'bad kind'; end if;
+  update model_providers set active=false where active;
+  insert into model_providers (name, kind, endpoint, model, active) values (p_name, p_kind, p_endpoint, p_model, true)
+  on conflict (name) do update set kind=excluded.kind, endpoint=excluded.endpoint, model=excluded.model, active=true;
+end $$;
+
+create or replace function active_model() returns table(name text, kind text, endpoint text, model text) language sql security definer as
+$$ select m.name, m.kind, m.endpoint, m.model from model_providers m where m.active and is_admin() $$;
