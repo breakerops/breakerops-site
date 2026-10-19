@@ -42,16 +42,16 @@ serve(async (req) => {
       return json({ error: 'reply_needs_shortening', detail: 'One reply, at most two SMS segments. No reminder created.' }, 422)
     }
     const db = createClient(Deno.env.get('SUPABASE_URL'), Deno.env.get('SUPABASE_SERVICE_ROLE_KEY'))
-    await db.from('reminders').upsert({
+    const { error: writeError } = await db.from('reminders').upsert({
       business_id: p.business_id,
       recipient_channel: p.recipient_channel,
       recipient: p.recipient,
       body: p.body,
       send_at: p.send_at,
       idempotency_key: p.idempotency_key,
-      template_id: p.template_id || null,
       created_by: p.created_by || 'conversation',
     }, { onConflict: 'business_id,idempotency_key', ignoreDuplicates: true })
+    if (writeError) return json({ error: writeError.message }, 500)
     // Always read back by key: covers both fresh inserts and repeat calls.
     const { data: row, error } = await db.from('reminders')
       .select('*')
