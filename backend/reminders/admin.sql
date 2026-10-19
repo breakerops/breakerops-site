@@ -71,3 +71,9 @@ end $$;
 
 create or replace function active_model() returns table(name text, kind text, endpoint text, model text) language sql security definer as
 $$ select m.name, m.kind, m.endpoint, m.model from model_providers m where m.active and is_admin() $$;
+
+-- v3 (Oct 19, 2026): owner-only signups list for /admin.
+create or replace function signups_list() returns table(phone text, source text, consent_text text, created_at timestamptz) language plpgsql security definer as $$ begin
+  if not is_admin() then raise exception 'not allowed'; end if;
+  return query select s.phone, s.source, s.consent_text, s.created_at from public.signups s order by s.created_at desc limit 200;
+end $$;
