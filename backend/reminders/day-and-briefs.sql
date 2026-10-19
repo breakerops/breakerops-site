@@ -50,7 +50,7 @@ grant insert on calendar_items to anon;
 -- Brief enqueue: subscriptions whose local time is now, one reminder per day.
 create or replace view v_due_briefs as
 select s.business_id, s.recipient_channel, s.recipient,
-       'Today:' || E'\n' || 'https://www.breakerops.com/day/?t=' || t.token as body,
+       'Today:' || E'\n' || 'https://www.breakerops.com/day/?t=' || t.token || '&v=2' as body,
        s.id as sid, s.tz
 from brief_subscriptions s
 join day_tokens t on t.business_id = s.business_id
