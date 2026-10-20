@@ -173,7 +173,7 @@ function signOut(){sb.auth.signOut().then(function(){location.replace('/login/')
 sb.auth.getSession().then(function(r){
  if(!r.data.session){location.replace('/login/');return;}
  user=r.data.session.user;route();
- sb.from('calendar_items').select('id,title,due_date,due_time,notes,completed').order('due_date').then(function(q){items=q.data||[];render();});
+ sb.from('calendar_items').select('id,title,due_date,due_time,notes,completed').order('due_date').then(function(q){items=q.data||[];render();renderSummaryPanel();});
 });
 render();
 </script></body></html>
