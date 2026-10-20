@@ -57,7 +57,7 @@ $('enable').onclick=async()=>{
 $('test').onclick=async()=>{
  try{
   say('Sending...');
-  const r=await fetch(SUPA_URL+'/functions/v1/push-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({user_id:user.id,title:'Call Paul',body:'10:30 AM \u00b7 Festival Foods',url:'https://www.breakerops.com/app/'})});
+  const r=await fetch(SUPA_URL+'/functions/v1/push-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({user_id:user.id,title:'BreakerOps test',body:'If this banner showed up, push notifications work.',url:'https://www.breakerops.com/app/'})});
   const j=await r.json();
   say(r.ok?('Sent to '+j.sent+' device(s), '+j.failed+' failed.'):('Failed: '+(j.error||r.status)));
  }catch(e){say('Error: '+e.message)}
