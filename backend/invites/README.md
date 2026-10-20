@@ -2,7 +2,7 @@
 
 Status: proposal and interactive sample preview. NOT deployed. No live invitations issued.
 
-Approved direction (Jake, October 20, 2026): public requests stay; customers ask Matt for a one-use invitation for a buddy's email; Jake sets each customer's allowance. No numeric allowance is approved. Existing users remain active.
+Approved direction (Jake, October 20, 2026): public requests stay; customers ask Matt for a one-use invitation for a buddy's email; Jake sets each customer's allowance. Five invitations per customer is approved; Jake may adjust allowances. Existing users remain active.
 
 ## Separate the concepts
 
@@ -40,7 +40,7 @@ Auth public self-signup is currently disabled. Existing custom SMTP is configure
 
 ## Unset decisions / dependencies
 
-- Jake must assign allowance values before real issuance. No default is activated.
+- Five is the approved default. It must be enforced by the server, not just displayed. No allowance is activated or assigned by this sample preview.
 - Expiry period and quota recovery behavior are proposed, not yet activated; expiry should be configurable with the owner choosing the policy.
 - New business provisioning must not imply a paid plan or billing obligation. Existing businesses contain plan/price fields; no pricing or payment consent is inferred from accepting a referral.
 - The product's trusted sender-to-account mapping is not built. Email verification alone does not verify a phone number. This must be resolved before a phone sender is treated as an admitted customer.
