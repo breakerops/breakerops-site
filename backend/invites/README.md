@@ -45,3 +45,11 @@ Auth public self-signup is currently disabled. Existing custom SMTP is configure
 - New business provisioning must not imply a paid plan or billing obligation. Existing businesses contain plan/price fields; no pricing or payment consent is inferred from accepting a referral.
 - The product's trusted sender-to-account mapping is not built. Email verification alone does not verify a phone number. This must be resolved before a phone sender is treated as an admitted customer.
 - Auth email challenge/new-account activation needs an implementation and an end-to-end controlled test. No external invitation email is authorized by the preview.
+
+## Implemented private core (not activated)
+
+`invite-core.sql` implements the transaction core in a non-public staged schema. It compiles and its `invite-core-tests.sql` suite passes against the project's actual PostgreSQL engine inside a BEGIN/ROLLBACK transaction. Schema, fixture Auth users, quotas and invitations are all rolled back. No staged schema is deployed persistently.
+
+Tests cover five-slot exhaustion, retry without another token, changed-recipient retry rejection, other-customer issuance denial, owner-only quota adjustment, disabled activation, wrong verified email, separate staged business creation, same-user redemption retry, no duplicate business, refusal to revoke accepted invites, and reclaim after unused revocation/expiry. Concurrent multi-session races remain to test. SQL row locking is present but is not reported as concurrency-test proof.
+
+The test-only business table avoids production pricing defaults. Production wrappers, verified-email challenge orchestration, safe phone identity binding, the owner controls, and actual separate-business provisioning remain unfinished. All function execution is revoked from public/anon/authenticated. Production activation defaults OFF and no public RPC wrappers exist.
