@@ -1,5 +1,5 @@
 -- Event reminders for the owner's own calendar: one desk email per timed
--- calendar item about 30 minutes before it starts, carrying the BreakerOps
+-- calendar item about 15 minutes before it starts, carrying the BreakerOps
 -- calendar link. Instinct relays that email to Jake as a text. The product
 -- SMS channel stays untouched until Telnyx is live. Applied 2026-10-20.
 --
@@ -20,8 +20,8 @@ where i.due_time is not null
   and coalesce(i.completed, false) = false
   and i.due_date = (now() at time zone 'America/Chicago')::date
   and (i.due_date + i.due_time)
-        between (now() at time zone 'America/Chicago') + interval '28 minutes'
-            and (now() at time zone 'America/Chicago') + interval '42 minutes';
+        between (now() at time zone 'America/Chicago') + interval '11 minutes'
+            and (now() at time zone 'America/Chicago') + interval '21 minutes';
 
 select cron.unschedule('event-reminders-enqueue') where exists
   (select 1 from cron.job where jobname = 'event-reminders-enqueue');
