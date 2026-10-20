@@ -146,7 +146,7 @@ function renderSummaryPanel(){var el=$('sum-panel');if(!el)return;var d=summaryF
  var h='<h2>'+esc(head)+'</h2>';
  var talked=(d&&d.talked)||[],tho=(d&&d.thoughts)||[];
  var cal=[];
- if(sumSel>=today){cal=on(sumSel).map(function(v){var t=v.due_time?fmtTime(v.due_time):'Anytime';var tent=/pending|tentative/i.test(v.notes||'')?' - tentative':'';return [t,esc(v.title)+tent];});}
+ if(sumSel>=today){cal=on(sumSel).sort(function(a,b){return (a.due_time?1:0)-(b.due_time?1:0);}).map(function(v){var t=v.due_time?fmtTime(v.due_time):'Anytime';var tent=/pending|tentative/i.test(v.notes||'')?' - tentative':'';return [t,esc(v.title)+tent];});}
  else if(d&&d.calendar){cal=d.calendar;}
  if(!talked.length&&!cal.length&&!tho.length){el.innerHTML=h+'<p class="sum-empty">'+(fut?'Nothing planned for this day yet.':'Nothing recorded for this day.')+'</p>';return;}
  if(cal.length){h+='<div class="sum-seg"><h3>On the calendar</h3>'+cal.map(function(c){return '<p><span class="sum-time">'+esc(c[0])+'</span>'+c[1]+'</p>';}).join('')+'<p class="sum-note">Scheduled, from your calendar.</p></div>';}
