@@ -1,0 +1,65 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BreakerOps | Push preview</title><meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="/push-preview/manifest.webmanifest">
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png">
+<meta name="theme-color" content="#171717">
+<style>
+body{margin:0;background:#171717;color:#e8e8ed;font-family:-apple-system,'Helvetica Neue',Arial,sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center}
+.card{max-width:340px;padding:28px 22px;text-align:center}
+h1{font-size:26px;letter-spacing:-0.02em;margin:0 0 6px;font-weight:800}
+h1 span{font-weight:400}
+p{color:#9a9aa0;font-size:14px;line-height:1.5;margin:0 0 20px}
+button{display:block;width:100%;padding:14px;border-radius:12px;border:0;font-size:16px;font-weight:600;cursor:pointer;margin:10px 0}
+.enable{background:#6b9bff;color:#0d0d0d}
+.test{background:#26262a;color:#e8e8ed;display:none}
+.status{font-size:13px;color:#9a9aa0;min-height:18px;margin-top:12px}
+.note{font-size:12px;color:#626267;margin-top:22px}
+</style></head><body>
+<div class="card">
+<h1>Breaker<span>Ops</span></h1>
+<p id="sub">Push notification preview. Enable notifications, then send yourself a test.</p>
+<button class="enable" id="enable">Enable notifications</button>
+<button class="test" id="test">Send test notification</button>
+<div class="status" id="status"></div>
+<div class="note">Internal preview. Nothing here changes your current reminders.</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPA_URL='https://euchkgnqxycqzgamucry.supabase.co';
+const ANON='sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne';
+const VAPID_PUB='BNquoQu1tKe8OBfFAKSVHCZd0G5ySodsRJHdmvAAbPHITvkLBlWKnkAQ54oxgTPQuPRX4uP0fTO_xyQTkERUarI';
+const sb=supabase.createClient(SUPA_URL,ANON);
+const $=id=>document.getElementById(id);
+function u8(s){const p='='.repeat((4-s.length%4)%4);const b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
+function say(m){$('status').textContent=m}
+let session=null,user=null;
+(async()=>{
+ const {data}=await sb.auth.getSession(); session=data.session;
+ if(!session){say('Sign in at breakerops.com/app first, then reopen this page.');$('enable').style.display='none';return}
+ const {data:u}=await sb.auth.getUser(); user=u.user;
+ if('serviceWorker' in navigator){navigator.serviceWorker.register('/push-preview/sw.js').catch(()=>{})}
+})();
+$('enable').onclick=async()=>{
+ try{
+  say('Requesting permission...');
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted'){say('Permission not granted.');return}
+  const reg=await navigator.serviceWorker.ready;
+  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID_PUB)});
+  const k=sub.toJSON().keys;
+  const {error}=await sb.from('push_subscriptions').upsert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent},{onConflict:'endpoint'});
+  if(error){say('Save failed: '+error.message);return}
+  say('Subscribed. Send yourself a test.');
+  $('test').style.display='block';
+ }catch(e){say('Error: '+e.message)}
+};
+$('test').onclick=async()=>{
+ try{
+  say('Sending...');
+  const r=await fetch(SUPA_URL+'/functions/v1/push-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({user_id:user.id,title:'Call Paul',body:'10:30 AM \u00b7 Festival Foods',url:'https://www.breakerops.com/app/'})});
+  const j=await r.json();
+  say(r.ok?('Sent to '+j.sent+' device(s), '+j.failed+' failed.'):('Failed: '+(j.error||r.status)));
+ }catch(e){say('Error: '+e.message)}
+};
+</script></body></html>
