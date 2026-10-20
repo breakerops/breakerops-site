@@ -10,8 +10,8 @@ body{margin:0;background:#171717;color:#e8e8ed;font-family:-apple-system,'Helvet
 h1{font-size:26px;letter-spacing:-0.02em;margin:0 0 6px;font-weight:800}
 h1 span{font-weight:400}
 p{color:#9a9aa0;font-size:14px;line-height:1.5;margin:0 0 20px}
-button{display:block;width:100%;padding:14px;border-radius:12px;border:0;font-size:16px;font-weight:600;cursor:pointer;margin:10px 0}
-.enable{background:#6b9bff;color:#0d0d0d}
+[hidden]{display:none!important}button{display:block;width:100%;padding:14px;border-radius:12px;border:0;font-size:16px;font-weight:600;cursor:pointer;margin:10px 0}
+.setup{background:#26262a;color:#e8e8ed}.steps{text-align:left;border:1px solid #45454a;border-radius:12px;padding:16px;margin:14px 0}.steps h2{font-size:17px;margin:0 0 12px}.steps ol{padding-left:22px;margin:0}.steps li{font-size:14px;line-height:1.55;margin:10px 0}.steps p{font-size:13px;margin:12px 0 0}.share-icon{width:18px;height:21px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7}.enable{background:#6b9bff;color:#0d0d0d}
 .test{background:#26262a;color:#e8e8ed;display:none}
 .status{font-size:13px;color:#9a9aa0;min-height:18px;margin-top:12px}
 input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background:#26262a;color:#e8e8ed;border:1px solid #626267;border-radius:8px;font:inherit}label{display:block;text-align:left;font-size:14px}.note{font-size:12px;color:#626267;margin-top:22px}
@@ -19,6 +19,17 @@ input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background
 <div class="card">
 <h1>Breaker<span>Ops</span></h1>
 <p id="sub">Push notification preview. Enable notifications, then send yourself a test.</p>
+<button class="setup" id="setup" aria-expanded="false" aria-controls="install-steps">Set up on this iPhone</button>
+<section class="steps" id="install-steps" hidden aria-label="Home Screen setup">
+<h2>Add BreakerOps to your Home Screen</h2>
+<ol>
+<li>In Safari, tap the menu beside <strong>breakerops.com</strong> in the address bar, then <strong>Share</strong> <svg class="share-icon" viewBox="0 0 24 28" aria-label="square with upward arrow"><path d="M5 12H2v14h20V12h-3M12 19V2M6 8l6-6 6 6"/></svg>. If you already see the Share symbol in your toolbar, tap it directly.</li>
+<li>Scroll down the Share menu and tap <strong>Add to Home Screen</strong>. If missing, look under <strong>Edit Actions</strong>.</li>
+<li>If shown, leave <strong>Open as Web App</strong> on, then tap <strong>Add</strong>.</li>
+<li>Open the new <strong>BreakerOps</strong> icon from your Home Screen. Sign in there, then tap <strong>Enable notifications</strong>.</li>
+</ol>
+<p>This button shows the steps. iPhone requires the actual Home Screen action in the browser menu. If you are inside another app's browser, open this page in Safari first.</p>
+</section>
 <button class="enable" id="enable">Enable notifications</button>
 <button class="test" id="test">Send test notification</button>
 <form id="signin" hidden>
@@ -38,6 +49,14 @@ const sb=supabase.createClient(SUPA_URL,ANON);
 const $=id=>document.getElementById(id);
 function u8(s){const p='='.repeat((4-s.length%4)%4);const b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
 function say(m){$('status').textContent=m}
+const installed=window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
+$('setup').hidden=installed;
+$('setup').onclick=()=>{
+ const open=$('install-steps').hidden;
+ $('install-steps').hidden=!open;
+ $('setup').setAttribute('aria-expanded',String(open));
+ if(open) $('install-steps').scrollIntoView({behavior:'smooth',block:'start'});
+};
 let session=null,user=null;
 (async()=>{
  const {data}=await sb.auth.getSession(); session=data.session;
@@ -53,6 +72,8 @@ $('signin').onsubmit=async(e)=>{
 };
 $('enable').onclick=async()=>{
  try{
+  const ios=/iPad|iPhone|iPod/.test(navigator.userAgent);
+  if(ios && !installed){$('install-steps').hidden=false;$('setup').setAttribute('aria-expanded','true');$('install-steps').scrollIntoView({behavior:'smooth',block:'start'});say('First open BreakerOps from your Home Screen icon.');return}
   if(!user) throw new Error('Sign in before enabling notifications.');
   if(!('Notification' in window) || !('PushManager' in window)) throw new Error('Open the Home Screen app on a supported device.');
   say('Requesting permission...');
