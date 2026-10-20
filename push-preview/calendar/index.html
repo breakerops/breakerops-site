@@ -156,7 +156,7 @@ function renderSummaryPanel(){var el=$('sum-panel');if(!el)return;var d=summaryF
 function renderSummaries(){var mt=$('smt'),strip=$('sum-week');if(!mt||!strip)return;
  var s=new Date(sumWeek),e=new Date(s);e.setDate(e.getDate()+6);
  mt.textContent=s.toLocaleString('en-US',{month:'short',day:'numeric'})+' - '+e.toLocaleDateString('en-US',{month:'short',day:'numeric'});
- var h='';for(var i=0;i<7;i++){var x=new Date(s);x.setDate(s.getDate()+i);var k=key(x);var has=!!summaryFor(k);
+ var h='';for(var i=0;i<7;i++){var x=new Date(s);x.setDate(s.getDate()+i);var k=key(x);var has=!!summaryFor(k)||(k>=key(new Date())&&on(k).length>0);
   h+='<button data-sumday="'+k+'" class="'+(k===sumSel?'today':'')+'"><span class="wd">'+x.toLocaleDateString('en-US',{weekday:'short'})+'</span><span class="num">'+x.getDate()+'</span><span class="dot-row">'+(has?'<i class="dot"></i>':'')+'</span></button>';}
  strip.innerHTML=h;renderSummaryPanel();}
 function summaries(){$('pg').innerHTML='<a class="back-link" href="#">Back to calendar</a><h1>Summaries</h1><div class="nav"><button id="spv" aria-label="Previous week">&lt;</button><b id="smt"></b><button id="snx" aria-label="Next week">&gt;</button></div><div class="week-choice"><div class="week-seven" id="sum-week"></div><p class="tap-hint">Tap a day to see its summary.</p></div><div class="sum-panel" id="sum-panel" aria-live="polite"></div>';
