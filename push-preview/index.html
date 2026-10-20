@@ -12,14 +12,17 @@ h1 span{font-weight:400}
 p{color:#9a9aa0;font-size:14px;line-height:1.5;margin:0 0 20px}
 [hidden]{display:none!important}button{display:block;width:100%;padding:14px;border-radius:12px;border:0;font-size:16px;font-weight:600;cursor:pointer;margin:10px 0}
 .setup{background:#26262a;color:#e8e8ed}.steps{text-align:left;border:1px solid #45454a;border-radius:12px;padding:16px;margin:14px 0}.steps h2{font-size:17px;margin:0 0 12px}.steps ol{padding-left:22px;margin:0}.steps li{font-size:14px;line-height:1.55;margin:10px 0}.steps p{font-size:13px;margin:12px 0 0}.share-icon{width:18px;height:21px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7}.enable{background:#6b9bff;color:#0d0d0d}
-.test{background:#26262a;color:#e8e8ed;display:none}
+.test{background:#26262a;color:#e8e8ed}.progress{display:flex;gap:5px;margin:24px 0 16px}.progress span{flex:1;height:4px;border-radius:4px;background:#38383d}.progress .done{background:#6b9bff}.step-title{font-size:21px;margin:0 0 10px}button:disabled{opacity:.5}a{color:#8db1ff}
 .status{font-size:13px;color:#9a9aa0;min-height:18px;margin-top:12px}
 input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background:#26262a;color:#e8e8ed;border:1px solid #626267;border-radius:8px;font:inherit}label{display:block;text-align:left;font-size:14px}.note{font-size:12px;color:#626267;margin-top:22px}
 </style></head><body>
 <div class="card">
 <h1>Breaker<span>Ops</span></h1>
-<p id="sub">Push notification preview. Enable notifications, then send yourself a test.</p>
-<button class="setup" id="setup" aria-expanded="false" aria-controls="install-steps">Set up on this iPhone</button>
+<p id="sub">A short setup, one step at a time.</p>
+<div id="progress" class="progress" aria-label="Setup progress"></div>
+<h2 id="step-title" class="step-title">Checking your setup...</h2>
+<p id="step-copy"></p>
+<button class="setup" id="setup" hidden aria-expanded="false" aria-controls="install-steps">Show me where to tap</button>
 <section class="steps" id="install-steps" hidden aria-label="Home Screen setup">
 <h2>Add BreakerOps to your Home Screen</h2>
 <ol>
@@ -30,8 +33,10 @@ input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background
 </ol>
 <p>This button shows the steps. iPhone requires the actual Home Screen action in the browser menu. If you are inside another app's browser, open this page in Safari first.</p>
 </section>
-<button class="enable" id="enable">Enable notifications</button>
-<button class="test" id="test">Send test notification</button>
+<button class="enable" id="enable" hidden>Enable notifications</button>
+<button class="test" id="test" hidden>Send test notification</button>
+<button class="setup" id="confirmed" hidden>I saw the test banner</button>
+<button class="setup" id="retry" hidden>Check again</button>
 <form id="signin" hidden>
 <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
 <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
@@ -49,53 +54,112 @@ const sb=supabase.createClient(SUPA_URL,ANON);
 const $=id=>document.getElementById(id);
 function u8(s){const p='='.repeat((4-s.length%4)%4);const b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
 function say(m){$('status').textContent=m}
-const installed=window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
-$('setup').hidden=installed;
+const isInstalled=()=>window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
+let session=null,user=null,bannerConfirmed=false;
+function step(n,title,copy){
+ $('progress').innerHTML=[1,2,3,4].map(i=>'<span class="'+(i<n?'done':'')+'" aria-label="Step '+i+(i<n?' complete':'')+'"></span>').join('');
+ $('step-title').textContent=n+' of 4 · '+title;
+ $('step-copy').textContent=copy;
+ for(const id of ['setup','signin','enable','test','confirmed','retry']) $(id).hidden=true;
+ $('install-steps').hidden=true;
+ $('setup').setAttribute('aria-expanded','false');
+ say('');
+}
+async function refresh(){
+ if(!isInstalled()){
+  step(1,'Add to your Home Screen','One iPhone step first. Use the browser menu to add this page, then open the new BreakerOps icon. The next step appears there.');
+  $('setup').hidden=false;
+  return;
+ }
+ const {data,error}=await sb.auth.getSession(); session=data.session;
+ if(error || !session){
+  step(2,'Sign in','Use your existing BreakerOps login. Home Screen apps may ask you to sign in separately from Safari.');
+  $('signin').hidden=false; return;
+ }
+ const verified=await sb.auth.getUser();user=verified.data.user;
+ if(!user){step(2,'Sign in again','Your session needs to be refreshed.');$('signin').hidden=false;return}
+ step(3,'Allow notifications','Tap Enable notifications, then Allow on the iPhone prompt. This lets BreakerOps send this preview test.');
+ $('enable').hidden=false;
+ if(!('Notification' in window) || !('PushManager' in window)){
+  say('Notifications are not available here. Open the Home Screen icon on a supported iPhone.');$('enable').hidden=true;return;
+ }
+ try{
+  const reg=await navigator.serviceWorker.register('/push-preview/sw.js');
+  const sub=await reg.pushManager.getSubscription();
+  if(Notification.permission==='granted' && sub){
+   const saved=await sb.from('push_subscriptions').select('id').eq('endpoint',sub.endpoint);
+   if(saved.error) throw saved.error;
+   if(saved.data.length){readyForTest();return}
+  }
+  if(Notification.permission==='denied'){
+   say('Notifications are off. In iPhone Settings, find notifications for this Home Screen app and allow them, then return here.');
+   $('enable').hidden=true;$('retry').hidden=false;
+  }
+ }catch(e){say('Setup check failed: '+e.message);$('retry').hidden=false}
+}
+function readyForTest(){
+ step(4,'Try your first alert','Send one clearly labeled test. Your iPhone decides when to show it. Tap the banner to open your calendar.');
+ $('test').hidden=false;
+}
 $('setup').onclick=()=>{
  const open=$('install-steps').hidden;
  $('install-steps').hidden=!open;
  $('setup').setAttribute('aria-expanded',String(open));
  if(open) $('install-steps').scrollIntoView({behavior:'smooth',block:'start'});
 };
-let session=null,user=null;
-(async()=>{
- const {data}=await sb.auth.getSession(); session=data.session;
- if(!session){say('Sign in with your BreakerOps account.');$('signin').hidden=false;$('enable').style.display='none';return}
- const {data:u}=await sb.auth.getUser(); user=u.user;
- if('serviceWorker' in navigator){navigator.serviceWorker.register('/push-preview/sw.js').catch(()=>{})}
-})();
 $('signin').onsubmit=async(e)=>{
- e.preventDefault(); say('Signing in...');
- const {error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
- if(error){say('Sign-in failed. Check your email and password.');return}
- location.reload();
+ e.preventDefault();say('Signing in...');
+ const button=$('signin').querySelector('button');button.disabled=true;
+ try{
+  const {error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+  $('password').value='';
+  if(error){say('Sign-in failed. Check your email and password.');return}
+  await refresh();
+ }catch(e){say('Sign-in failed. Please try again.')}finally{button.disabled=false}
 };
 $('enable').onclick=async()=>{
+ $('enable').disabled=true;
  try{
-  const ios=/iPad|iPhone|iPod/.test(navigator.userAgent);
-  if(ios && !installed){$('install-steps').hidden=false;$('setup').setAttribute('aria-expanded','true');$('install-steps').scrollIntoView({behavior:'smooth',block:'start'});say('First open BreakerOps from your Home Screen icon.');return}
-  if(!user) throw new Error('Sign in before enabling notifications.');
-  if(!('Notification' in window) || !('PushManager' in window)) throw new Error('Open the Home Screen app on a supported device.');
-  say('Requesting permission...');
+  if(!isInstalled() || !user){await refresh();return}
   const perm=await Notification.requestPermission();
-  if(perm!=='granted'){say('Permission not granted.');return}
+  if(perm!=='granted'){await refresh();return}
+  say('Saving notification permission...');
   const reg=await navigator.serviceWorker.ready;
   const sub=(await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID_PUB)});
   const k=sub.toJSON().keys;
   const existing=await sb.from('push_subscriptions').select('id').eq('endpoint',sub.endpoint);
   if(existing.error) throw existing.error;
-  const {error}=existing.data.length ? {error:null} : await sb.from('push_subscriptions').insert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent});
-  if(error){say('Save failed: '+error.message);return}
-  say('Permission saved. Send a clearly labeled test alert.');
-  $('test').style.display='block';
- }catch(e){say('Error: '+e.message)}
+  if(!existing.data.length){
+   const {error}=await sb.from('push_subscriptions').insert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent});
+   if(error) throw error;
+  }
+  readyForTest();
+ }catch(e){say('Could not save notification permission: '+e.message);$('retry').hidden=false}
+ finally{$('enable').disabled=false}
 };
 $('test').onclick=async()=>{
+ $('test').disabled=true; say('Sending your test...');
  try{
-  say('Sending...');
-  const r=await fetch(SUPA_URL+'/functions/v1/push-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({user_id:user.id,title:'BreakerOps test',body:'If this banner showed up, push notifications work.',url:'https://www.breakerops.com/app/'})});
+  const current=await sb.auth.getSession();session=current.data.session;
+  if(!session){await refresh();return}
+  const r=await fetch(SUPA_URL+'/functions/v1/push-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({user_id:user.id})});
   const j=await r.json();
-  say(r.ok?('Sent to '+j.sent+' device(s), '+j.failed+' failed.'):('Failed: '+(j.error||r.status)));
- }catch(e){say('Error: '+e.message)}
+  if(!r.ok) throw new Error(j.error||String(r.status));
+  if(j.sent>0){
+   say('The push service accepted the test for '+j.sent+' device(s). Delivery is not confirmed yet. Check your Lock Screen or Notification Center.');
+   $('confirmed').hidden=false;
+  }else{say('No test was accepted. '+j.failed+' device(s) failed. Try Check again to review permission.');$('retry').hidden=false}
+ }catch(e){say('Test failed: '+e.message);$('retry').hidden=false}
+ finally{$('test').disabled=false}
 };
+$('confirmed').onclick=()=>{
+ bannerConfirmed=true;
+ $('step-title').textContent='Test banner confirmed by you';
+ $('step-copy').textContent='Thanks. You have confirmed the banner appeared. Tap it to check calendar access too. Your scheduled reminders have not changed.';
+ $('confirmed').hidden=true;
+ say('Preview only. Automatic event alerts are not connected yet.');
+};
+$('retry').onclick=()=>refresh();
+window.addEventListener('pageshow',()=>refresh());
+refresh();
 </script></body></html>
