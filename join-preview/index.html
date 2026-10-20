@@ -1,0 +1,31 @@
+<!doctype html><html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1"><meta name="robots" content="noindex,nofollow"><title>BreakerOps | Join preview</title><style>
+*{box-sizing:border-box}body{margin:0;background:#171717;color:#e8e8ed;font:16px/1.5 -apple-system,BlinkMacSystemFont,Arial,sans-serif}.wrap{max-width:620px;margin:auto;padding:28px 22px 60px}.brand{font-size:22px;font-weight:800;letter-spacing:-.02em}.brand span{font-weight:400}.tag{color:#9a9aa0;font-size:12px;margin:10px 0 32px}h1{font-size:30px;line-height:1.2;margin:0 0 10px}h2{font-size:18px;margin:0 0 12px}p{color:#aaaab0;margin:0 0 20px}.panel{padding:20px;background:#222225;border:1px solid #3a3a3c;border-radius:14px;margin:16px 0}label{display:block;font-size:14px;margin:14px 0 6px}input,select,button{font:inherit;border-radius:9px;padding:12px;width:100%;border:1px solid #515158;background:#171717;color:#e8e8ed}button{cursor:pointer;background:#6b9bff;color:#101010;font-weight:600;border:0;margin-top:14px}button:disabled{opacity:.4;cursor:default}.fine{font-size:13px;color:#9a9aa0}.step{display:flex;gap:12px;align-items:flex-start;border-top:1px solid #414146;padding-top:14px;margin-top:14px}.num{flex:0 0 26px;height:26px;border-radius:50%;border:1px solid #515158;color:#91b5ff;font-size:13px;display:flex;align-items:center;justify-content:center}.num.done{background:#6b9bff;color:#101010;border-color:#6b9bff}.step div{flex:1}.pill{font-size:12px;color:#91b5ff}.err{color:#ff9a9a}#notice{font-size:14px;color:#b6c9ff;min-height:24px}details{margin-top:28px;color:#aaaab0}summary{cursor:pointer}li{margin:10px 0}.mode{margin-bottom:28px}[hidden]{display:none!important}</style></head><body><main class="wrap">
+<div class="brand">Breaker<span>Ops</span></div><div class="tag">INTERACTIVE PREVIEW · SAMPLE DATA ONLY · NO REAL ACCOUNTS, EMAILS, OR BUSINESSES</div>
+<label for="view">Preview link state</label><select id="view" class="mode"><option value="valid">Valid link</option><option value="expired">Expired link</option><option value="revoked">Revoked link</option><option value="used">Already used</option><option value="wrongemail">Wrong email trying to accept</option></select>
+
+<section id="valid">
+<h1>You're invited to BreakerOps.</h1>
+<p>Example Construction created this invitation for <strong style="color:#e8e8ed">buddy@example.com</strong>. The link alone does not grant access.</p>
+<div class="panel">
+<div class="step" id="s1"><div class="num" id="n1">1</div><div><h2>Confirm your email</h2><p class="fine">A confirmation link goes to the invited address only, never to an address typed here.</p><button id="send">Simulate sending confirmation</button><p class="fine" id="sent" hidden>Confirmation sent to buddy@example.com (simulated, nothing really sent). <a href="#" id="confirm" style="color:#91b5ff">Pretend you clicked it</a></p></div></div>
+<div class="step" id="s2" hidden><div class="num" id="n2">2</div><div><h2>Name your business</h2><label for="bname">Business name</label><input id="bname" value="Buddy's Construction LLC"><button id="accept" disabled>Accept invitation</button></div></div>
+<div class="step" id="s3" hidden><div class="num done">3</div><div><h2 id="done-title"></h2><p class="fine">A separate business account is created. You never join the inviter's workspace, and the inviter never sees your data. No plan or charge applies until the owner chooses one.</p></div></div>
+</div>
+</section>
+
+<section id="expired" hidden><div class="panel"><h2 class="err">This link expired.</h2><p>Invitation links are time-limited. Ask your contact to have Matt send a fresh one. Asking again does not cost them an extra invite while the old one is unused.</p></div></section>
+<section id="revoked" hidden><div class="panel"><h2 class="err">This link is no longer valid.</h2><p>The sender took it back. Ask them for a new invitation if this was a mistake.</p></div></section>
+<section id="used" hidden><div class="panel"><h2 class="err">This link was already used.</h2><p>Each invitation works once, for one business. If you already accepted, sign in instead.</p></div></section>
+<section id="wrongemail" hidden><div class="panel"><h2 class="err">This invitation was sent to a different email.</h2><p>It was created for buddy@example.com. Sign in with that exact address, or ask for a new invitation to your address.</p></div></section>
+
+<div id="notice" role="status"></div>
+<details><summary>What the real page must do</summary><ul><li>Look up the token hash server-side and never consume the invite on page load or email-scanner prefetch.</li><li>Create the account through an email challenge to the stored invited address; public self-signup stays off.</li><li>Recheck validity, expiry, revocation, and the verified email at acceptance, in one transaction.</li><li>Provision a separate business with zero pricing until Jake sets referral plan terms.</li><li>Keep raw tokens out of analytics, referrers, and logs.</li></ul><p class="fine">Sample only: every state above is simulated in this page. Backend admission remains disabled.</p></details>
+</main><script>
+const $=id=>document.getElementById('view').value,id2=x=>document.getElementById(x);
+function show(){const v=id2('view').value;for(const id of['valid','expired','revoked','used','wrongemail'])id2(id).hidden=id!==v;id2('notice').textContent=''}
+id2('view').onchange=show;
+id2('send').onclick=()=>{id2('sent').hidden=false;id2('n1').classList.add('done');id2('notice').textContent='Sample only: no email was sent.'};
+id2('confirm').onclick=e=>{e.preventDefault();id2('s2').hidden=false;id2('accept').disabled=false;id2('notice').textContent='Sample: email treated as verified.'};
+id2('accept').onclick=()=>{const n=id2('bname').value.trim();if(!n){id2('bname').reportValidity();return}id2('n2').classList.add('done');id2('done-title').textContent=n+' is ready (sample).';id2('s3').hidden=false;id2('accept').disabled=true;id2('notice').textContent='Sample acceptance: no real business or account was created.'};
+show();
+</script></body></html>
