@@ -14,14 +14,19 @@ button{display:block;width:100%;padding:14px;border-radius:12px;border:0;font-si
 .enable{background:#6b9bff;color:#0d0d0d}
 .test{background:#26262a;color:#e8e8ed;display:none}
 .status{font-size:13px;color:#9a9aa0;min-height:18px;margin-top:12px}
-.note{font-size:12px;color:#626267;margin-top:22px}
+input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background:#26262a;color:#e8e8ed;border:1px solid #626267;border-radius:8px;font:inherit}label{display:block;text-align:left;font-size:14px}.note{font-size:12px;color:#626267;margin-top:22px}
 </style></head><body>
 <div class="card">
 <h1>Breaker<span>Ops</span></h1>
-<p id="sub">Push notification preview. Test sending is paused while final checks are completed.</p>
+<p id="sub">Push notification preview. Enable notifications, then send yourself a test.</p>
 <button class="enable" id="enable">Enable notifications</button>
-<button class="test" id="test" disabled>Test sending paused</button>
-<div class="status" id="status"></div>
+<button class="test" id="test">Send test notification</button>
+<form id="signin" hidden>
+<label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
+<button type="submit">Sign in to preview</button>
+</form>
+<div class="status" id="status" role="status"></div>
 <div class="note">Internal preview. Nothing here changes your current reminders.</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -36,10 +41,16 @@ function say(m){$('status').textContent=m}
 let session=null,user=null;
 (async()=>{
  const {data}=await sb.auth.getSession(); session=data.session;
- if(!session){say('Sign in at breakerops.com/app first, then reopen this page.');$('enable').style.display='none';return}
+ if(!session){say('Sign in with your BreakerOps account.');$('signin').hidden=false;$('enable').style.display='none';return}
  const {data:u}=await sb.auth.getUser(); user=u.user;
  if('serviceWorker' in navigator){navigator.serviceWorker.register('/push-preview/sw.js').catch(()=>{})}
 })();
+$('signin').onsubmit=async(e)=>{
+ e.preventDefault(); say('Signing in...');
+ const {error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+ if(error){say('Sign-in failed. Check your email and password.');return}
+ location.reload();
+};
 $('enable').onclick=async()=>{
  try{
   if(!user) throw new Error('Sign in before enabling notifications.');
@@ -54,7 +65,7 @@ $('enable').onclick=async()=>{
   if(existing.error) throw existing.error;
   const {error}=existing.data.length ? {error:null} : await sb.from('push_subscriptions').insert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent});
   if(error){say('Save failed: '+error.message);return}
-  say('Permission saved. Test sending is paused for final checks.');
+  say('Permission saved. Send a clearly labeled test alert.');
   $('test').style.display='block';
  }catch(e){say('Error: '+e.message)}
 };

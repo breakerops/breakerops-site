@@ -15,7 +15,12 @@ Deno.serve(async (req) => {
   if (req.method !== "POST") return reply({error:"method not allowed"}, 405);
   const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
   if (!token) return reply({ error: "auth required" }, 401);
-  const { user_id, title, body, url } = await req.json();
+  let payload;
+  try { payload = await req.json(); } catch { return reply({error:"invalid request"},400); }
+  const { user_id } = payload;
+  const title = "BreakerOps test";
+  const body = "If this banner showed up, push notifications work.";
+  const url = "https://www.breakerops.com/app/";
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data.user || data.user.id !== user_id) {
@@ -26,12 +31,16 @@ Deno.serve(async (req) => {
     contactInformation: "mailto:nick@breakerops.com",
     vapidKeys,
   });
-  const { data: subs } = await sb.from("push_subscriptions").select("*").eq("user_id", user_id);
+  const { data: subs, error: readError } = await sb.from("push_subscriptions").select("*").eq("user_id", user_id);
+  if (readError) return reply({error:"Unable to read subscriptions"},500);
   let sent = 0, failed = 0;
   const dead: string[] = [];
   for (const s of subs || []) {
-    const subscriber = appServer.subscribe({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } });
     try {
+      const endpoint = new URL(s.endpoint);
+      const trusted = endpoint.protocol === "https:" && (endpoint.hostname === "web.push.apple.com" || endpoint.hostname.endsWith(".push.apple.com") || endpoint.hostname === "fcm.googleapis.com" || endpoint.hostname.endsWith(".push.services.mozilla.com"));
+      if (!trusted) { failed++; continue; }
+      const subscriber = appServer.subscribe({ endpoint: s.endpoint, keys: { p256dh: s.p256dh, auth: s.auth } });
       await subscriber.pushTextMessage(JSON.stringify({ title, body, url }), {});
       sent++;
     } catch (err) {
