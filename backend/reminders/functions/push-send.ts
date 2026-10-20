@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   const { user_id } = payload;
   const title = "BreakerOps test";
   const body = "If this banner showed up, push notifications work.";
-  const url = "https://www.breakerops.com/app/";
+  const url = "https://www.breakerops.com/push-preview/calendar/";
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data.user || data.user.id !== user_id) {

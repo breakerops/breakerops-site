@@ -56,6 +56,12 @@ function u8(s){const p='='.repeat((4-s.length%4)%4);const b=atob((s+p).replace(/
 function say(m){$('status').textContent=m}
 const isInstalled=()=>window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
 let session=null,user=null,bannerConfirmed=false;
+const completionKey=id=>'breakerops.pushPreview.completed.v1.'+id;
+function openCalendar(){
+ say('Banner confirmed by you. Opening your calendar...');
+ $('confirmed').hidden=true;$('test').hidden=true;
+ location.replace('/push-preview/calendar/');
+}
 function step(n,title,copy){
  $('progress').innerHTML=[1,2,3,4].map(i=>'<span class="'+(i<n?'done':'')+'" aria-label="Step '+i+(i<n?' complete':'')+'"></span>').join('');
  $('step-title').textContent=n+' of 4 · '+title;
@@ -77,6 +83,7 @@ async function refresh(){
   $('signin').hidden=false; return;
  }
  const verified=await sb.auth.getUser();user=verified.data.user;
+ if(user){try{if(localStorage.getItem(completionKey(user.id))==='yes'){openCalendar();return}}catch(_){}}
  if(!user){step(2,'Sign in again','Your session needs to be refreshed.');$('signin').hidden=false;return}
  step(3,'Allow notifications','Tap Enable notifications, then Allow on the iPhone prompt. This lets BreakerOps send this preview test.');
  $('enable').hidden=false;
@@ -154,10 +161,8 @@ $('test').onclick=async()=>{
 };
 $('confirmed').onclick=()=>{
  bannerConfirmed=true;
- $('step-title').textContent='Test banner confirmed by you';
- $('step-copy').textContent='Thanks. You have confirmed the banner appeared. Tap it to check calendar access too. Your scheduled reminders have not changed.';
- $('confirmed').hidden=true;
- say('Preview only. Automatic event alerts are not connected yet.');
+ if(user){try{localStorage.setItem(completionKey(user.id),'yes')}catch(_){}}
+ openCalendar();
 };
 $('retry').onclick=()=>refresh();
 window.addEventListener('pageshow',()=>refresh());
