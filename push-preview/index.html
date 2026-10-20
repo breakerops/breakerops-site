@@ -42,13 +42,17 @@ let session=null,user=null;
 })();
 $('enable').onclick=async()=>{
  try{
+  if(!user) throw new Error('Sign in before enabling notifications.');
+  if(!('Notification' in window) || !('PushManager' in window)) throw new Error('Open the Home Screen app on a supported device.');
   say('Requesting permission...');
   const perm=await Notification.requestPermission();
   if(perm!=='granted'){say('Permission not granted.');return}
   const reg=await navigator.serviceWorker.ready;
-  const sub=await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID_PUB)});
+  const sub=(await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID_PUB)});
   const k=sub.toJSON().keys;
-  const {error}=await sb.from('push_subscriptions').upsert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent},{onConflict:'endpoint'});
+  const existing=await sb.from('push_subscriptions').select('id').eq('endpoint',sub.endpoint);
+  if(existing.error) throw existing.error;
+  const {error}=existing.data.length ? {error:null} : await sb.from('push_subscriptions').insert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent});
   if(error){say('Save failed: '+error.message);return}
   say('Subscribed. Send yourself a test.');
   $('test').style.display='block';

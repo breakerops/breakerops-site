@@ -3,15 +3,23 @@
 import * as webpush from "jsr:@negrel/webpush";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
+const cors = {
+  "Access-Control-Allow-Origin": "https://www.breakerops.com",
+  "Access-Control-Allow-Headers": "authorization, apikey, content-type, x-client-info",
+  "Access-Control-Allow-Methods": "POST, OPTIONS",
+  "Vary": "Origin",
+};
+const reply = (data: unknown, status = 200) => Response.json(data, { status, headers: cors });
 Deno.serve(async (req) => {
-  if (req.method !== "POST") return new Response("method not allowed", { status: 405 });
+  if (req.method === "OPTIONS") return new Response(null, { status: 204, headers: cors });
+  if (req.method !== "POST") return reply({error:"method not allowed"}, 405);
   const token = (req.headers.get("Authorization") || "").replace("Bearer ", "");
-  if (!token) return Response.json({ error: "auth required" }, { status: 401 });
+  if (!token) return reply({ error: "auth required" }, 401);
   const { user_id, title, body, url } = await req.json();
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data.user || data.user.id !== user_id) {
-    return Response.json({ error: "forbidden" }, { status: 403 });
+    return reply({ error: "forbidden" }, 403);
   }
   const vapidKeys = await webpush.importVapidKeys(JSON.parse(Deno.env.get("VAPID_JWKS")!), { extractable: false });
   const appServer = await webpush.ApplicationServer.new({
@@ -33,5 +41,5 @@ Deno.serve(async (req) => {
     }
   }
   if (dead.length) await sb.from("push_subscriptions").delete().in("id", dead);
-  return Response.json({ sent, failed, pruned: dead.length });
+  return reply({ sent, failed, pruned: dead.length });
 });
