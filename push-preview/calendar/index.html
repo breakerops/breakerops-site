@@ -46,7 +46,7 @@ body{background:var(--bg);color:var(--fg)}a{color:var(--accent)}.brand{color:var
 <div class="menu" id="mm" hidden><button data-go="settings">Settings</button></div>
 </div></div></header>
 <main><div class="wrap">
-<div id="cal" style="flex:1;min-height:0;display:flex;flex-direction:column"><nav class="primary-nav" aria-label="Main"><button aria-current="page" onclick="go('')">Calendar</button><button onclick="go('thoughts')">Thoughts</button></nav><div class="bar"><div class="seg" id="sg"><button data-v="w" aria-pressed="true">My week</button><button data-v="m" aria-pressed="false">My month</button></div></div>
+<div id="cal" style="flex:1;min-height:0;display:flex;flex-direction:column"><nav class="primary-nav" aria-label="Main"><button aria-current="page" onclick="go('')">Calendar</button></nav><div class="bar"><div class="seg" id="sg"><button data-v="w" aria-pressed="true">My week</button><button data-v="m" aria-pressed="false">My month</button></div></div>
 <button id="calendar-back" class="calendar-back" hidden></button><div class="nav"><button id="pv" aria-label="Previous">&lt;</button><b id="mt"></b><button id="nx" aria-label="Next">&gt;</button></div>
 <div id="cv"></div>
 <p class="fine" id="empty" hidden>Text us something you promised. Once confirmed, it will show up here.</p><p class="fine" id="text-contact"></p></div>
@@ -142,7 +142,7 @@ function integrations(){ $('pg').innerHTML=back()+'<h1>Integrations</h1><p class
 function signOut(){sb.auth.signOut().then(function(){location.replace('/login/');});}
 sb.auth.getSession().then(function(r){
  if(!r.data.session){location.replace('/login/');return;}
- user=r.data.session.user;route();loadThoughts();
+ user=r.data.session.user;route();
  sb.from('calendar_items').select('id,title,due_date,due_time,notes,completed').order('due_date').then(function(q){items=q.data||[];render();});
 });
 render();
