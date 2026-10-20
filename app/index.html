@@ -141,12 +141,16 @@ async function thoughts(){var pg=$('pg');pg.innerHTML='<a class="back-link" href
 var SUMMARY_DATA={},sumSel=key(new Date()),sumWeek=new Date();sumWeek.setHours(0,0,0,0);sumWeek.setDate(sumWeek.getDate()-sumWeek.getDay());
 function summaryFor(k){return SUMMARY_DATA[k]||null;}
 function renderSummaryPanel(){var el=$('sum-panel');if(!el)return;var d=summaryFor(sumSel);
- var head=(sumSel===key(new Date())?'Today \u00b7 ':'')+new Date(sumSel+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
+ var today=key(new Date()),fut=sumSel>today;
+ var head=(sumSel===today?'Today \u00b7 ':'')+new Date(sumSel+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});
  var h='<h2>'+esc(head)+'</h2>';
- var talked=(d&&d.talked)||[],cal=(d&&d.calendar)||[],tho=(d&&d.thoughts)||[];
- if(!talked.length&&!cal.length&&!tho.length){el.innerHTML=h+'<p class="sum-empty">Nothing recorded for this day.</p>';return;}
- if(cal.length){h+='<div class="sum-seg"><h3>On the calendar</h3>'+cal.map(function(c){return '<p><span class="sum-time">'+esc(c[0])+'</span>'+esc(c[1])+'</p>';}).join('')+'<p class="sum-note">Scheduled, from your calendar.</p></div>';}
- if(talked.length){h+='<div class="sum-seg"><h3>Talked about</h3>'+talked.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
+ var talked=(d&&d.talked)||[],tho=(d&&d.thoughts)||[];
+ var cal=[];
+ if(sumSel>=today){cal=on(sumSel).map(function(v){var t=v.due_time?fmtTime(v.due_time):'Anytime';var tent=/pending|tentative/i.test(v.notes||'')?' - tentative':'';return [t,esc(v.title)+tent];});}
+ else if(d&&d.calendar){cal=d.calendar;}
+ if(!talked.length&&!cal.length&&!tho.length){el.innerHTML=h+'<p class="sum-empty">'+(fut?'Nothing planned for this day yet.':'Nothing recorded for this day.')+'</p>';return;}
+ if(cal.length){h+='<div class="sum-seg"><h3>On the calendar</h3>'+cal.map(function(c){return '<p><span class="sum-time">'+esc(c[0])+'</span>'+c[1]+'</p>';}).join('')+'<p class="sum-note">Scheduled, from your calendar.</p></div>';}
+ if(talked.length){h+='<div class="sum-seg"><h3>'+(fut?'From your conversations':'Talked about')+'</h3>'+talked.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
  if(tho.length){h+='<div class="sum-seg"><h3>Thoughts</h3>'+tho.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
  el.innerHTML=h;}
 function renderSummaries(){var mt=$('smt'),strip=$('sum-week');if(!mt||!strip)return;
