@@ -11,7 +11,7 @@ h1{font-size:26px;letter-spacing:-0.02em;margin:0 0 6px;font-weight:800}
 h1 span{font-weight:400}
 p{color:#9a9aa0;font-size:14px;line-height:1.5;margin:0 0 20px}
 [hidden]{display:none!important}button{display:block;width:100%;padding:14px;border-radius:12px;border:0;font-size:16px;font-weight:600;cursor:pointer;margin:10px 0}
-.calendar-link{box-sizing:border-box;display:block;padding:14px;border-radius:12px;font-size:16px;font-weight:600;margin:10px 0;text-decoration:none}.setup{background:#26262a;color:#e8e8ed}.steps{text-align:left;border:1px solid #45454a;border-radius:12px;padding:16px;margin:14px 0}.steps h2{font-size:17px;margin:0 0 12px}.steps ol{padding-left:22px;margin:0}.steps li{font-size:14px;line-height:1.55;margin:10px 0}.steps p{font-size:13px;margin:12px 0 0}.share-icon{width:18px;height:21px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7}.enable{background:#6b9bff;color:#0d0d0d}
+.calendar-link{box-sizing:border-box;display:block;padding:14px;border-radius:12px;font-size:16px;font-weight:600;margin:10px 0;text-decoration:none}.setup{background:#26262a;color:#e8e8ed}.steps{text-align:left;border:1px solid #45454a;border-radius:12px;padding:16px;margin:14px 0}.steps h2{font-size:17px;margin:0 0 12px}.steps ol{padding-left:22px;margin:0}.steps li{font-size:14px;line-height:1.55;margin:10px 0}.steps p{font-size:13px;margin:12px 0 0}.share-icon{width:18px;height:21px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7}.menu-icon{width:19px;height:19px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7;stroke-linecap:round}.enable{background:#6b9bff;color:#0d0d0d}
 .test{background:#26262a;color:#e8e8ed}.progress{display:flex;gap:5px;margin:24px 0 16px}.progress span{flex:1;height:4px;border-radius:4px;background:#38383d}.progress .done{background:#6b9bff}.step-title{font-size:21px;margin:0 0 10px}button:disabled{opacity:.5}a{color:#8db1ff}
 .status{font-size:13px;color:#9a9aa0;min-height:18px;margin-top:12px}
 input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background:#26262a;color:#e8e8ed;border:1px solid #626267;border-radius:8px;font:inherit}label{display:block;text-align:left;font-size:14px}.note{font-size:12px;color:#626267;margin-top:22px}
@@ -24,12 +24,12 @@ input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background
 <p id="step-copy"></p>
 <button class="setup" id="setup" hidden aria-expanded="false" aria-controls="install-steps">Show me where to tap</button>
 <section class="steps" id="install-steps" hidden aria-label="Home Screen setup">
-<h2>Add BreakerOps to your Home Screen</h2>
+<h2>Add Calendar to your Home Screen</h2>
 <ol>
-<li>In Safari, tap the menu beside <strong>breakerops.com</strong> in the address bar, then <strong>Share</strong> <svg class="share-icon" viewBox="0 0 24 28" aria-label="square with upward arrow"><path d="M5 12H2v14h20V12h-3M12 19V2M6 8l6-6 6 6"/></svg>. If you already see the Share symbol in your toolbar, tap it directly.</li>
+<li>In Safari, tap the menu <svg class="menu-icon" viewBox="0 0 24 24" aria-label="browser menu symbol"><rect x="7" y="3" width="10" height="8" rx="2"/><line x1="4" y1="15" x2="20" y2="15"/><line x1="4" y1="19.5" x2="20" y2="19.5"/></svg> beside <strong>breakerops.com</strong> in the address bar, then <strong>Share</strong> <svg class="share-icon" viewBox="0 0 24 28" aria-label="square with upward arrow"><path d="M5 12H2v14h20V12h-3M12 19V2M6 8l6-6 6 6"/></svg>. If you already see the Share symbol in your toolbar, tap it directly.</li>
 <li>Scroll down the Share menu and tap <strong>Add to Home Screen</strong>. If missing, look under <strong>Edit Actions</strong>.</li>
 <li>If shown, leave <strong>Open as Web App</strong> on, then tap <strong>Add</strong>.</li>
-<li>Open the new <strong>BreakerOps</strong> icon from your Home Screen. Sign in there, then tap <strong>Enable notifications</strong>.</li>
+<li>Open the new <strong>Calendar</strong> icon from your Home Screen. Sign in there, then tap <strong>Enable notifications</strong>.</li>
 </ol>
 <p>This button shows the steps. iPhone requires the actual Home Screen action in the browser menu. If you are inside another app's browser, open this page in Safari first.</p>
 </section>
@@ -73,7 +73,7 @@ function step(n,title,copy){
 }
 async function refresh(){
  if(!isInstalled()){
-  step(1,'Add to your Home Screen','One iPhone step first. Use the browser menu to add this page, then open the new BreakerOps icon. The next step appears there.');
+  step(1,'Add to your Home Screen','One iPhone step first. Use the browser menu to add this page, then open the new Calendar icon. The next step appears there.');
   $('setup').hidden=false;
   return;
  }
