@@ -7,7 +7,7 @@
 <h1>You're invited to BreakerOps.</h1>
 <p>Example Construction created this invitation for <strong style="color:#e8e8ed">buddy@example.com</strong>. The link alone does not grant access.</p>
 <div class="panel">
-<div class="step" id="s1"><div class="num" id="n1">1</div><div><h2>Confirm your email</h2><p class="fine">A confirmation link goes to the invited address only, never to an address typed here.</p><button id="send">Simulate sending confirmation</button><p class="fine" id="sent" hidden>Confirmation sent to buddy@example.com (simulated, nothing really sent). <a href="#" id="confirm" style="color:#91b5ff">Pretend you clicked it</a></p></div></div>
+<div class="step" id="s1"><div class="num" id="n1">1</div><div><h2>Confirm your email</h2><p class="fine">A confirmation link goes to the invited address only, never to an address typed here.</p><button id="send">Simulate sending confirmation</button><p class="fine" id="sent" hidden>Confirmation sent to buddy@example.com (simulated, nothing really sent).</p><button id="confirm" class="secondary" hidden>Pretend you clicked the email link</button></div></div>
 <div class="step" id="s2" hidden><div class="num" id="n2">2</div><div><h2>Name your business</h2><label for="bname">Business name</label><input id="bname" value="Buddy's Construction LLC"><button id="accept" disabled>Accept invitation</button></div></div>
 <div class="step" id="s3" hidden><div class="num done">3</div><div><h2 id="done-title"></h2><p class="fine">A separate business account is created. You never join the inviter's workspace, and the inviter never sees your data. No plan or charge applies until the owner chooses one.</p></div></div>
 </div>
@@ -24,8 +24,8 @@
 const $=id=>document.getElementById('view').value,id2=x=>document.getElementById(x);
 function show(){const v=id2('view').value;for(const id of['valid','expired','revoked','used','wrongemail'])id2(id).hidden=id!==v;id2('notice').textContent=''}
 id2('view').onchange=show;
-id2('send').onclick=()=>{id2('sent').hidden=false;id2('n1').classList.add('done');id2('notice').textContent='Sample only: no email was sent.'};
-id2('confirm').onclick=e=>{e.preventDefault();id2('s2').hidden=false;id2('accept').disabled=false;id2('notice').textContent='Sample: email treated as verified.'};
+id2('send').onclick=()=>{id2('sent').hidden=false;id2('confirm').hidden=false;id2('n1').classList.add('done');id2('notice').textContent='Sample only: no email was sent.'};
+id2('confirm').onclick=()=>{id2('s2').hidden=false;id2('accept').disabled=false;id2('notice').textContent='Sample: email treated as verified.'};
 id2('accept').onclick=()=>{const n=id2('bname').value.trim();if(!n){id2('bname').reportValidity();return}id2('n2').classList.add('done');id2('done-title').textContent=n+' is ready (sample).';id2('s3').hidden=false;id2('accept').disabled=true;id2('notice').textContent='Sample acceptance: no real business or account was created.'};
 show();
 </script></body></html>
