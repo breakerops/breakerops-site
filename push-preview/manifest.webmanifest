@@ -1,6 +1,6 @@
 {
-  "name": "BreakerOps Push Preview",
-  "short_name": "BreakerOps",
+  "name": "BreakerOps Calendar",
+  "short_name": "BreakerOps Calendar",
   "id": "/push-preview/",
   "start_url": "/push-preview/",
   "scope": "/push-preview/",
@@ -8,7 +8,16 @@
   "background_color": "#171717",
   "theme_color": "#171717",
   "icons": [
-    { "src": "/assets/img/brand-icon-v2.png", "sizes": "256x256", "type": "image/png", "purpose": "any" },
-    { "src": "/assets/img/apple-touch-icon.png", "sizes": "180x180", "type": "image/png" }
+    {
+      "src": "/assets/img/calendar-icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/img/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
   ]
 }

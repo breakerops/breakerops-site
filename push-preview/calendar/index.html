@@ -1,6 +1,6 @@
 <!doctype html>
 <html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
-<title>BreakerOps | Your calendar</title><meta name="robots" content="noindex,nofollow">
+<title>BreakerOps | Your calendar</title><meta name="apple-mobile-web-app-title" content="BreakerOps Calendar"><meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#111111">
 <script>
 (function(){var pref='auto';try{pref=localStorage.getItem('breakerops.appearance')||'auto';}catch(e){}var mq=window.matchMedia('(prefers-color-scheme: dark)');function apply(){document.documentElement.dataset.theme=pref==='dark'||(pref==='auto'&&mq.matches)?'dark':'light';document.documentElement.style.colorScheme=document.documentElement.dataset.theme;}window.breakerAppearance={get:function(){return pref;},set:function(p){if(['light','dark','auto'].indexOf(p)<0)return;pref=p;try{localStorage.setItem('breakerops.appearance',p);}catch(e){}apply();}};if(mq.addEventListener)mq.addEventListener('change',apply);else if(mq.addListener)mq.addListener(apply);window.addEventListener('storage',function(e){if(e.key==='breakerops.appearance'){pref=e.newValue||'auto';apply();}});apply();})();
