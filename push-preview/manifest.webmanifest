@@ -1,6 +1,6 @@
 {
-  "name": "BreakerOps Calendar",
-  "short_name": "BreakerOps Calendar",
+  "name": "Calendar",
+  "short_name": "Calendar",
   "id": "/push-preview/",
   "start_url": "/push-preview/",
   "scope": "/push-preview/",
