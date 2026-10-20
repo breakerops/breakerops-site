@@ -1,61 +1,45 @@
-# Invite-only admission draft
+# Invite-only admission: phone-first
 
-Status: proposal and interactive sample preview. NOT deployed. No live invitations issued.
+Status: backend built and tested, nothing deployed or activated. No live invitations, no SMS sent, no prospects contacted.
 
-Approved direction (Jake, October 20, 2026): public requests stay; customers ask Matt for a one-use invitation for a buddy's email; Jake sets each customer's allowance. Five invitations per customer is approved; Jake may adjust allowances. Existing users remain active.
+Approved direction (Jake, October 20, 2026, verified phone messages):
+- Five invitations per customer, Jake controls the allowance, no automatic refill, displayed count is real (phonemsg-01M5D4K9J0724FFASWVE9YJ3Y9, phonemsg-01M5D4HWNJZX20EMKTSKFFZP8Q).
+- Invitations bind to the buddy's PHONE NUMBER, not email. The buddy starts by texting Matt; no email signup, account, or app setup upfront (phonemsg-01M5D7NG1QA4X04QRA8HY0GTP8).
+- The Home Screen app comes days later, after they've been talking to Matt; Jake questions whether any login is needed even then (phonemsg-01M5D7RK9ZXXXCN3MNJF4NNA6D).
+- The earlier email-bound model (v1, preserved in git history as invite-core-email-v1.sql) is superseded.
 
-## Separate the concepts
+## The v2 model
 
-- A public request is a lead, never admission.
-- A customer referral is a product admission for a NEW business, never membership in the inviter's workspace.
-- Existing `user_invites` are coworker invitation requests, not this admission mechanism.
-- An Auth identity is not sufficient product admission. Product data/work must require active admission and membership.
-- A quota belongs to the inviting customer business. Changing users must not reset it.
+1. Customer texts Matt: "invite my buddy, +1..." The desk matches the sender's phone to their bound customer row (admin-only binding) and issues a phone-bound invitation. No token or link exists; the phone number IS the invitation.
+2. The buddy texts Matt whenever ready. The inbound handler (telnyx-inbound.ts, undeployed) calls `redeem_on_inbound`, which atomically creates their SEPARATE business (phone-owned, no name until learned in conversation, no account) and consumes the invitation. Existing admitted phones route to the conversation; unknown phones route to the public lead path.
+3. At most one pending invitation per phone across all customers (advisory-lock serialized; race-tested). Inviting an admitted phone or an existing customer's phone is rejected.
+4. Days later, the Home Screen app: the phone-owned business binds to an account via `bind_business_account`, only after phone possession is proven (see "App access" below). Production provisioning into public.businesses with explicit zero pricing happens only after that binding.
 
-## Server boundary
+## App access: verified routes (no email/password either way)
 
-1. `set_allowance`: only Jake's authenticated owner ID; nonnegative quota, no inferred refill.
-2. `issue`: authenticated active customer or a trusted Matt adapter representing a verified customer. Lock that customer's allowance row. Count active, unexpired reservations plus accepted invitations. Reject when at quota. Generate a random 256-bit token, persist only its hash, fixed intended email, issuer, expiry and audit data. Return the raw link once. An idempotency key makes a retry return the same issuance outcome without spending another allowance. Raw tokens must not appear in logs.
-3. `verify`: the raw link identifies an invitation, not an account. A challenge must go to its stored email through existing Auth/custom SMTP, never a browser-supplied replacement address. Generic responses avoid exposing invitation existence. Rate-limit by token and account, and avoid consuming an invite merely by GET or mail-scanner prefetch.
-4. `redeem`: verify the authenticated user's current confirmed email against the stored intended email. Lock invitation and quota consistently. Check active issuer admission, unexpired/unrevoked/unconsumed invitation and quota reservation. Provision a separate business plus membership and active admission atomically with consumption. Return the existing completed outcome on retry by the same user; reject all other replays.
-5. `revoke`: issuer or Jake may revoke an unused link. Revocation/expiry releases the reservation. Accepted invitations stay counted and cannot be silently converted into access revocation.
-6. `inbound work`: the future Matt conversation handler must resolve the sender to an admitted account before model calls, task creation or outbound work. Unknown texters must not receive automatic onboarding until public-response words are approved. Current deployed Telnyx webhook only processes delivery receipts.
+Texting phase needs no authentication at all: the SMS channel itself identifies the phone.
 
-## Identity and storage
+For the days-later app (their calendar view must show only THEIR business):
+- Route A, scoped display link: Matt texts a one-tap link that opens the calendar view for their business only. The link is a revocable bearer secret; "add to Home Screen" keeps it. Recovery = Matt texts a fresh link; revocation = server-side. No login screen anywhere; the link itself is the (invisible) authentication. Weakest point: a forwarded link leaks read access until rotated.
+- Route B, Supabase phone OTP: real auth session with no email/password. Verified current capability: phone sign-in via SMS OTP (https://supabase.com/docs/guides/auth/phone-login) and the Send SMS Hook, which replaces Supabase's built-in SMS sending with your own provider, so Telnyx can carry the codes (https://supabase.com/docs/guides/auth/auth-hooks/send-sms-hook). OTPs are rate-limited (one per 60s default, 1h expiry). Cost: SMS per sign-in; one code entry at install; revocation via admin.
 
-Auth public self-signup is currently disabled. Existing custom SMTP is configured. A safe email-challenge implementation must be tested without sending prospects mail; configuration is not delivery proof. Raw admission tokens should be in a URL fragment, removed from the address bar after capture, kept out of analytics/referrers, and exchanged via POST. Private schemas and RLS deny direct public reads/writes. Service role keys never reach the browser. Do not trust editable user_metadata for admission.
+Not decided: which route. A raw phone number alone cannot safely grant private-calendar access (anyone could type it), so one possession proof - link or code - is required at the app step. Both keep Jake's "no login" feel; B is the durable one if the app gains account features.
 
-## Required tests before enabling
+## Implemented and tested (v2)
 
-- No quota assigned: cannot issue. Quota zero: cannot issue.
-- Concurrent issuance: never exceeds quota; idempotent retry doesn't reserve twice.
-- Revoke/expire: reservation returned. Accepted: remains used.
-- Wrong email, unconfirmed email, anonymous user, different account: cannot redeem.
-- Concurrent redemption: exactly one separate business admitted.
-- Retry after provisioning interruption: no orphan or duplicate business.
-- Old member/coworker invitation cannot become product referral.
-- Non-owner cannot change quotas or inspect another customer's invite list.
-- Link or verification failures never activate service or spend SMS credits.
-- Existing users, calendar and current reminder delivery remain unchanged.
+`invite-core.sql` (staged schema, never persisted), `service-wrappers.sql` (service_role only), `functions/invites-issue.ts` and `functions/telnyx-inbound.ts` (undeployed). Tests, all PASS against the project's real Postgres:
+- `invite-core-tests.sql` (rollback): five cap, idempotency, duplicate-phone-across-customers, activation gate, redeem admitted/member/none, admitted/customer phone rejected, revoke frees phone+slot, expired pending reclaimed, account binding rules.
+- `wrapper-tests.sql` (rollback): desk issue by customer phone, unknown phone, admin-only allowance/binding, redeem wrapper, revoke wrapper.
+- Race test (`invite-race-*.sql`, two concurrent committed sessions): same buddy phone invited by two customers at once; exactly one succeeds, the other fails with 'phone already invited'. Fixture cleaned to zero.
+- Grants: anon permission denied on all wrappers; service_role executes.
+Live teardown (`invite-live-teardown.sql`) verified: zero staged objects remain.
 
-## Unset decisions / dependencies
+## Missing before anything is operational (the real blockers)
 
-- Five is the approved default. It must be enforced by the server, not just displayed. No allowance is activated or assigned by this sample preview.
-- Expiry period and quota recovery behavior are proposed, not yet activated; expiry should be configurable with the owner choosing the policy.
-- New business provisioning must not imply a paid plan or billing obligation. Existing businesses contain plan/price fields; no pricing or payment consent is inferred from accepting a referral.
-- The product's trusted sender-to-account mapping is not built. Email verification alone does not verify a phone number. This must be resolved before a phone sender is treated as an admitted customer.
-- Auth email challenge/new-account activation needs an implementation and an end-to-end controlled test. No external invitation email is authorized by the preview.
+1. Telnyx has no payment method (Jake previously: "I don't want to yet"). Every Matt reply, welcome text, or OTP code is SMS spend. This is THE blocker; everything else is built around it. 10DLC campaign status is also unverified - unregistered senders get carrier-rejected.
+2. The inbound webhook URL must be added to the Telnyx messaging profile (owner action once live).
+3. Activation decisions still open: expiry per link (7-day default proposed, Jake's question unanswered), app-access route A vs B, zero-pricing default for referred businesses, activation switch (OFF).
 
-## Implemented private core (not activated)
+## Existing-user and public-flow guarantees
 
-`invite-core.sql` implements the transaction core in a non-public staged schema. `phone-binding.sql` adds an admin-only E.164 phone binding for the Matt text flow. `service-wrappers.sql` adds public-schema wrappers callable only by service_role, so Edge Functions verify the caller (user JWT or desk shared secret) and pass the verified actor through. `provisioning.sql` adds desk/admin-only production provisioning that writes explicit zero pricing so the `businesses` column defaults (3000 texts / 8000 cents plan) can never silently apply to a referral business that never consented to a plan. `functions/` holds undeployed Edge Function code: `invites-issue.ts` (customer JWT or desk key + phone), `invites-redeem.ts` (invitee JWT, verified-email match), `invites-start.ts` (email challenge; returns 503 and sends nothing unless `INVITES_EMAIL_ENABLED=true` - email delivery is not authorized).
-
-Everything was loaded onto the live project only for tests and removed afterwards (`invite-live-teardown.sql`): staged schema and all public wrappers verified absent after teardown.
-
-Tests (all PASS against the project's actual PostgreSQL):
-- `invite-core-tests.sql` (BEGIN/ROLLBACK): five-slot exhaustion, retry without another token, changed-recipient retry rejection, other-customer issuance denial, owner-only quota adjustment, disabled activation, wrong verified email, separate staged business creation, same-user redemption retry, no duplicate business, refusal to revoke accepted invites, reclaim after unused revocation/expiry.
-- `wrapper-tests.sql` (BEGIN/ROLLBACK): wrappers pass the verified actor through, allowance admin-only, phone binding admin-only, issue-by-phone, unknown phone rejected, peek without consuming, activation gate, zero-pricing provisioning, owner membership row.
-- Race test (`invite-race-*.sql`, two concurrent committed sessions on the live project): session A issued and committed while session B blocked on the customer row lock and then failed with `allowance exhausted`. Exactly one link existed afterwards. Fixture rows fully cleaned up.
-- Grant checks: `anon` gets permission denied on every public wrapper; `service_role` executes.
-
-Remaining before activation: deploy nothing until Jake settles activation; the email challenge is untested end-to-end (and unauthorized); the public join/redemption page does not exist; provisioning's zero-pricing default is a proposal, not a settled plan policy; expiry default (7 days, 1-30 allowed) is a proposal.
+Public requests stay public and unchanged. Existing users keep access. `user_invites` (coworker queue) is untouched. Acceptance never touches the inviter's workspace or implies a paid plan.

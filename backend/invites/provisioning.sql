@@ -13,6 +13,9 @@ begin
   select * into l from invite_stage.links where id = p_link and accepted_at is not null;
   if not found then raise exception 'invite not accepted'; end if;
   select * into b from invite_stage.businesses where id = l.accepted_business_id;
+  if b.owner_user_id is null then
+    raise exception 'account not bound: phone-owned business is not ready for app provisioning';
+  end if;
   insert into public.businesses(id, name, plan_texts, overage_cents, plan_price_cents, addon_user_cents)
   values (b.id, b.name, 0, 0, 0, 0)
   returning id into new_id;
