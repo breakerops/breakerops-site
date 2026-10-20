@@ -11,7 +11,7 @@ h1{font-size:26px;letter-spacing:-0.02em;margin:0 0 6px;font-weight:800}
 h1 span{font-weight:400}
 p{color:#9a9aa0;font-size:14px;line-height:1.5;margin:0 0 20px}
 [hidden]{display:none!important}button{display:block;width:100%;padding:14px;border-radius:12px;border:0;font-size:16px;font-weight:600;cursor:pointer;margin:10px 0}
-.setup{background:#26262a;color:#e8e8ed}.steps{text-align:left;border:1px solid #45454a;border-radius:12px;padding:16px;margin:14px 0}.steps h2{font-size:17px;margin:0 0 12px}.steps ol{padding-left:22px;margin:0}.steps li{font-size:14px;line-height:1.55;margin:10px 0}.steps p{font-size:13px;margin:12px 0 0}.share-icon{width:18px;height:21px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7}.enable{background:#6b9bff;color:#0d0d0d}
+.calendar-link{box-sizing:border-box;display:block;padding:14px;border-radius:12px;font-size:16px;font-weight:600;margin:10px 0;text-decoration:none}.setup{background:#26262a;color:#e8e8ed}.steps{text-align:left;border:1px solid #45454a;border-radius:12px;padding:16px;margin:14px 0}.steps h2{font-size:17px;margin:0 0 12px}.steps ol{padding-left:22px;margin:0}.steps li{font-size:14px;line-height:1.55;margin:10px 0}.steps p{font-size:13px;margin:12px 0 0}.share-icon{width:18px;height:21px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7}.enable{background:#6b9bff;color:#0d0d0d}
 .test{background:#26262a;color:#e8e8ed}.progress{display:flex;gap:5px;margin:24px 0 16px}.progress span{flex:1;height:4px;border-radius:4px;background:#38383d}.progress .done{background:#6b9bff}.step-title{font-size:21px;margin:0 0 10px}button:disabled{opacity:.5}a{color:#8db1ff}
 .status{font-size:13px;color:#9a9aa0;min-height:18px;margin-top:12px}
 input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background:#26262a;color:#e8e8ed;border:1px solid #626267;border-radius:8px;font:inherit}label{display:block;text-align:left;font-size:14px}.note{font-size:12px;color:#626267;margin-top:22px}
@@ -35,7 +35,7 @@ input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background
 </section>
 <button class="enable" id="enable" hidden>Enable notifications</button>
 <button class="test" id="test" hidden>Send test notification</button>
-<button class="setup" id="confirmed" hidden>I saw the test banner</button>
+<a class="setup calendar-link" id="confirmed" href="/push-preview/calendar/" hidden>I saw it - open my calendar</a>
 <button class="setup" id="retry" hidden>Check again</button>
 <form id="signin" hidden>
 <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
@@ -43,7 +43,7 @@ input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background
 <button type="submit">Sign in to preview</button>
 </form>
 <div class="status" id="status" role="status"></div>
-<div class="note">Internal preview. Nothing here changes your current reminders.</div>
+<div class="note">Preview finish2. Your current reminders are unchanged.</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -91,7 +91,8 @@ async function refresh(){
   say('Notifications are not available here. Open the Home Screen icon on a supported iPhone.');$('enable').hidden=true;return;
  }
  try{
-  const reg=await navigator.serviceWorker.register('/push-preview/sw.js');
+  const reg=await navigator.serviceWorker.register('/push-preview/sw.js',{updateViaCache:'none'});
+  reg.update().catch(()=>{});
   const sub=await reg.pushManager.getSubscription();
   if(Notification.permission==='granted' && sub){
    const saved=await sb.from('push_subscriptions').select('id').eq('endpoint',sub.endpoint);
@@ -107,6 +108,7 @@ async function refresh(){
 function readyForTest(){
  step(4,'Try your first alert','Send one clearly labeled test. Your iPhone decides when to show it. Tap the banner to open your calendar.');
  $('test').hidden=false;
+ $('confirmed').hidden=false;
 }
 $('setup').onclick=()=>{
  const open=$('install-steps').hidden;
@@ -166,5 +168,9 @@ $('confirmed').onclick=()=>{
 };
 $('retry').onclick=()=>refresh();
 window.addEventListener('pageshow',()=>refresh());
+if('serviceWorker' in navigator){
+ navigator.serviceWorker.getRegistration('/push-preview/').then(reg=>{if(reg)reg.update().catch(()=>{})});
+}
+
 refresh();
 </script></body></html>

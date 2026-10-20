@@ -1,3 +1,15 @@
+const SETUP_BUILD = 'finish2';
+self.addEventListener('install', event => event.waitUntil(self.skipWaiting()));
+self.addEventListener('activate', event => event.waitUntil((async()=>{
+ await clients.claim();
+ const windows=await clients.matchAll({type:'window',includeUncontrolled:true});
+ for(const client of windows){
+  const url=new URL(client.url);
+  if(url.origin===self.location.origin && url.pathname==='/push-preview/' && url.searchParams.get('build')!==SETUP_BUILD){
+   await client.navigate('/push-preview/?build='+SETUP_BUILD);
+  }
+ }
+})()));
 self.addEventListener('push', (e) => {
   let d = {};
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = {}; }
