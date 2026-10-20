@@ -10,8 +10,8 @@
 -- mailbox). Chosen because the Resend key for the email channel is not
 -- configured yet; swap to channel 'email' once it is.
 --
--- The idempotency key includes the item's start time, so editing an event's
--- time produces a fresh reminder in the new window; the relay agent drops
+-- The idempotency key includes the item's full start datetime, so editing an event's
+-- time or date produces a fresh reminder in the new window; the relay agent drops
 -- the stale emailed one during its freshness check. The email carries the
 -- item id ('item' field) so the relay matches the event by id, never title.
 
@@ -38,7 +38,7 @@ select cron.schedule('event-reminders-enqueue', '*/5 * * * *', $cmd$
     insert into reminders
       (business_id, recipient_channel, recipient, body, send_at, idempotency_key, created_by)
     select business_id, 'log', 'event-relay', body, now(),
-           'event:' || item_id::text || ':' || to_char(due_dt, 'HH24:MI'), 'event-engine'
+           'event:' || item_id::text || ':' || to_char(due_dt, 'YYYY-MM-DD HH24:MI'), 'event-engine'
     from v_due_event_reminders
     on conflict (business_id, idempotency_key) do nothing
     returning body, idempotency_key
