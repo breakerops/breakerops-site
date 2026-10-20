@@ -18,9 +18,9 @@ button{display:block;width:100%;padding:14px;border-radius:12px;border:0;font-si
 </style></head><body>
 <div class="card">
 <h1>Breaker<span>Ops</span></h1>
-<p id="sub">Push notification preview. Enable notifications, then send yourself a test.</p>
+<p id="sub">Push notification preview. Test sending is paused while final checks are completed.</p>
 <button class="enable" id="enable">Enable notifications</button>
-<button class="test" id="test">Send test notification</button>
+<button class="test" id="test" disabled>Test sending paused</button>
 <div class="status" id="status"></div>
 <div class="note">Internal preview. Nothing here changes your current reminders.</div>
 </div>
@@ -54,7 +54,7 @@ $('enable').onclick=async()=>{
   if(existing.error) throw existing.error;
   const {error}=existing.data.length ? {error:null} : await sb.from('push_subscriptions').insert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent});
   if(error){say('Save failed: '+error.message);return}
-  say('Subscribed. Send yourself a test.');
+  say('Permission saved. Test sending is paused for final checks.');
   $('test').style.display='block';
  }catch(e){say('Error: '+e.message)}
 };
