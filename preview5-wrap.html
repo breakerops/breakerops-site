@@ -1,0 +1,11 @@
+<!doctype html><html><head><meta charset="utf-8"><title>preview</title></head><body style="margin:0;background:#3a3a3c;display:flex;gap:24px;padding:24px;font-family:-apple-system,sans-serif">
+<div><div style="color:#fff;font-size:13px;margin-bottom:6px">Today (day message)</div><iframe src="preview5-day.html#summaries" style="width:390px;height:780px;border:0;background:#171717"></iframe></div>
+<div><div style="color:#fff;font-size:13px;margin-bottom:6px">Sat Oct 24 (preview)</div><iframe src="preview5-day.html#summaries" id="fut" style="width:390px;height:780px;border:0;background:#171717"></iframe></div>
+<div><div style="color:#fff;font-size:13px;margin-bottom:6px">Thu Oct 22 (fallback: talked)</div><iframe src="preview5-day.html#summaries" id="past" style="width:390px;height:780px;border:0;background:#171717"></iframe></div>
+<div><div style="color:#fff;font-size:13px;margin-bottom:6px">Calendar tab (unchanged)</div><iframe src="preview5-day.html" style="width:390px;height:780px;border:0;background:#171717"></iframe></div>
+<script>
+function step(id,n){document.getElementById(id).addEventListener('load',function(){var w=this.contentWindow;setTimeout(function(){for(var i=0;i<n;i++){w.document.getElementById(n>0?'snx':'spv').click();}},700);});}
+step('fut',1);
+document.getElementById('past').addEventListener('load',function(){var w=this.contentWindow;setTimeout(function(){w.document.getElementById('spv').click();},700);});
+</script>
+</body></html>
