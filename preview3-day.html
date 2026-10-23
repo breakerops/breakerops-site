@@ -167,11 +167,10 @@ function renderSummaryPanel(){var el=$('sum-panel');var k=key(sumCur);
  var today=key(new Date()),fut=k>today;
  var h='';
  var talked=(d&&d.talked)||[],tho=(d&&d.thoughts)||[];
- var recap=[];
- if(!fut){recap=on(k).sort(function(a,b){return (a.due_time?1:0)-(b.due_time?1:0);}).map(function(v){var t=v.due_time?fmtTime(v.due_time):'Anytime';var tent=/pending|tentative/i.test(v.notes||'')?' - tentative':'';var st=v.completed?' - done':' - scheduled';return [t,esc(v.title)+tent+st];});}
- if(fut&&!talked.length&&!tho.length){el.innerHTML='<p class="sum-empty">Nothing to recap yet.</p>';return;}
+ var recap=on(k).sort(function(a,b){return (a.due_time?1:0)-(b.due_time?1:0);}).map(function(v){var t=v.due_time?fmtTime(v.due_time):'Anytime';var tent=/pending|tentative/i.test(v.notes||'')?' - tentative':'';var st=fut?' - planned':(v.completed?' - done':' - scheduled');return [t,esc(v.title)+tent+st];});
+ if(fut&&!recap.length&&!talked.length&&!tho.length){el.innerHTML='<p class="sum-empty">Nothing planned yet.</p>';return;}
  if(!fut&&!recap.length&&!talked.length&&!tho.length){el.innerHTML='<p class="sum-empty">'+(k===today?'Nothing to recap yet.':'Nothing recorded for this day.')+'</p>';return;}
- if(recap.length){h+='<div class="sum-seg"><h3>Recap</h3>'+recap.map(function(c){return '<p><span class="sum-time">'+esc(c[0])+'</span>'+c[1]+'</p>';}).join('')+'<p class="sum-note">Done means you confirmed it. Scheduled means it was on your calendar, not confirmed.</p></div>';}
+ if(recap.length){h+='<div class="sum-seg"><h3>'+(fut?'Coming up':'Recap')+'</h3>'+recap.map(function(c){return '<p><span class="sum-time">'+esc(c[0])+'</span>'+c[1]+'</p>';}).join('')+'<p class="sum-note">'+(fut?'Planned, from your calendar. Not done yet.':'Done means you confirmed it. Scheduled means it was on your calendar, not confirmed.')+'</p></div>';}
  if(talked.length){h+='<div class="sum-seg"><h3>'+(fut?'From your conversations':'Talked about')+'</h3>'+talked.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
  if(tho.length){h+='<div class="sum-seg"><h3>Thoughts</h3>'+tho.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
  el.innerHTML=h;}
