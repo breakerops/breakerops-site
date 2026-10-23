@@ -152,18 +152,11 @@ function renderSummaryPanel(){var el=$('sum-panel');var k=key(sumCur);
  var today=key(new Date()),fut=k>today;
  var h='';
  var talked=(d&&d.talked)||[],tho=(d&&d.thoughts)||[];
- var dayItems=on(k).sort(function(a,b){var ta=a.due_time||'99',tb=b.due_time||'99';return ta<tb?-1:ta>tb?1:0;});
- function phrase(v){var t=v.due_time?' at '+fmtTime(v.due_time):'';var tent=/pending|tentative/i.test(v.notes||'')?' (tentative)':'';return v.title+t+tent;}
- function joinPs(a){if(a.length===1)return a[0];if(a.length===2)return a[0]+' and '+a[1];return a.slice(0,-1).join(', ')+' and '+a[a.length-1];}
- var paras=[];
- if(fut){if(dayItems.length)paras.push('Coming up: '+joinPs(dayItems.map(phrase))+'.');}
- else{var dn=dayItems.filter(function(v){return v.completed;}),op=dayItems.filter(function(v){return !v.completed;});
-  if(dn.length)paras.push('You confirmed '+joinPs(dn.map(phrase))+'.');
-  if(op.length)paras.push('On the calendar but not confirmed: '+joinPs(op.map(phrase))+'.');}
- if(fut&&!paras.length&&!talked.length&&!tho.length){el.innerHTML='<p class="sum-empty">Nothing planned yet.</p>';return;}
- if(!fut&&!paras.length&&!talked.length&&!tho.length){el.innerHTML='<p class="sum-empty">'+(k===today?'Nothing to recap yet.':'Nothing recorded for this day.')+'</p>';return;}
- if(paras.length){h+='<div class="sum-seg">'+paras.map(function(p){return '<p>'+esc(p)+'</p>';}).join('')+'</div>';}
- if(talked.length){h+='<div class="sum-seg"><h3>'+(fut?'From your conversations':'Talked about')+'</h3>'+talked.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
+ var sum=(d&&d.summary)||[];
+ if(sum.length){h+='<div class="sum-seg">'+sum.map(function(p){return '<p>'+esc(p)+'</p>';}).join('')+'</div>';}
+ else if(talked.length){h+='<div class="sum-seg"><h3>'+(fut?'From your conversations':'Talked about')+'</h3>'+talked.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
+ else if(fut){h='<p class="sum-empty">'+(on(k).length?'Planned items are on the Calendar tab.':'Nothing planned yet.')+'</p>';}
+ else{h='<p class="sum-empty">'+(k===today?'Nothing to recap yet.':'Nothing recorded for this day.')+'</p>';}
  if(tho.length){h+='<div class="sum-seg"><h3>Thoughts</h3>'+tho.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
  el.innerHTML=h;}
 
