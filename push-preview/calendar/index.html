@@ -47,7 +47,8 @@ body{background:var(--bg);color:var(--fg)}a{color:var(--accent)}.brand{color:var
 </div></div></header>
 <main><div class="wrap">
 <nav class="primary-nav" id="pnav" aria-label="Main"><button aria-current="page" onclick="go('')">Calendar</button><button onclick="go('summaries')">Summaries</button></nav>
-<div id="cal" style="flex:1;min-height:0;display:flex;flex-direction:column"><div class="nav"><button id="pv" aria-label="Previous day">&lt;</button><b id="mt"></b><button id="nx" aria-label="Next day">&gt;</button></div>
+<div id="cal" style="flex:1;min-height:0;display:flex;flex-direction:column"><div class="bar"><div class="seg" id="sg"><button data-v="w" aria-pressed="true">My week</button><button data-v="m" aria-pressed="false">My month</button></div></div>
+<button id="calendar-back" class="calendar-back" hidden></button><div class="nav"><button id="pv" aria-label="Previous">&lt;</button><b id="mt"></b><button id="nx" aria-label="Next">&gt;</button></div>
 <div id="cv"></div>
 <p class="fine" id="empty" hidden>Text us something you promised. Once confirmed, it will show up here.</p><p class="fine" id="text-contact"></p></div>
 <div class="pg" id="pg" hidden></div>
@@ -55,7 +56,7 @@ body{background:var(--bg);color:var(--fg)}a{color:var(--accent)}.brand{color:var
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
-var items=[],cur=new Date(),expanded={};cur.setHours(0,0,0,0);
+var items=[],cur=new Date(),vw='w',dayOrigin=null,expanded={};cur.setHours(0,0,0,0);
 function $(i){return document.getElementById(i);}
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function key(d){return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');}
@@ -64,23 +65,38 @@ function displayNotes(value){var joins=[];var text=String(value||'').replace(/^\
 function fmtTime(t){if(!t)return '';var p=String(t).split(':');var h=+p[0];return ((h%12)||12)+':'+p[1]+' '+(h<12?'AM':'PM');}
 function timeLabel(x){return x.due_time?'<span class="item-time">'+fmtTime(x.due_time)+'</span> ':'';}
 function completionMark(x){return x.completed?'<span class="completion-indicator" aria-label="Completed"><svg class="drawn-check" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg></span>':'<span class="completion-space" aria-hidden="true"></span>';}
-
-var tk=key(new Date());
-
-
-
-$('cv').addEventListener('click',function(e){var x=e.target.closest('[data-expand]');if(x){expanded[x.dataset.expand]=!expanded[x.dataset.expand];render();return;}});
-function dayLabel(){var k=key(cur);return (k===tk?'Today \u00b7 ':'')+cur.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
-function dayAgenda(){var selected=key(cur),l=on(selected);var un=l.filter(function(v){return !v.due_time;}),ti=l.filter(function(v){return v.due_time;});function row(v){return '<div class="agenda-item'+(v.completed?' completed':'')+'"><button type="button" class="agenda-head" data-expand="'+v.id+'" aria-expanded="'+(expanded[v.id]?'true':'false')+'">'+completionMark(v)+timeLabel(v)+'<span class="agenda-title">'+esc(v.title)+'</span></button>'+(expanded[v.id]&&v.notes?'<div class="agenda-notes">'+displayNotes(v.notes)+'</div>':'')+'</div>';}var h='<div class="option-summary">';if(un.length){h+='<p style="margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600">Anytime today</p>'+un.map(row).join('');}if(ti.length){h+='<p style="margin:'+(un.length?'18px':'0')+' 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600">Scheduled</p>'+ti.map(row).join('');}if(!l.length)h+='<p class="fine">Nothing planned.</p>';return h+'</div>';}
+function chips(k){return on(k).map(function(x){return '<div class="t" title="'+esc(x.title)+'">'+esc(x.title)+'</div>';}).join('');}
+var DN=['S','M','T','W','T','F','S'],tk=key(new Date());
+function cell(d){var k=key(d),l=on(k);return '<button type="button" data-day="'+k+'" class="day-cell'+(k===tk?' today':'')+(l.length?' has-events':'')+'" aria-label="'+esc(d.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric',year:'numeric'}))+', '+l.length+' '+(l.length===1?'item':'items')+'"><span class="d">'+d.getDate()+'</span>'+chips(k)+(l.length?'<span class="event-count">'+l.length+' '+(l.length===1?'item':'items')+'</span>':'')+'</button>';}
+function openDay(k){dayOrigin={view:vw,date:new Date(cur)};cur=new Date(k+'T00:00:00');vw='w';render();$('calendar-back').focus();}
+$('calendar-back').onclick=function(){if(!dayOrigin)return;var origin=dayOrigin;dayOrigin=null;vw=origin.view;cur=new Date(origin.date);render();};
+$('cv').addEventListener('click',function(e){var x=e.target.closest('[data-expand]');if(x){expanded[x.dataset.expand]=!expanded[x.dataset.expand];render();return;}var b=e.target.closest('[data-day]');if(b){if(vw==='w'){dayOrigin=null;cur=new Date(b.dataset.day+'T00:00:00');render();}else openDay(b.dataset.day);}});
 function render(){
+ $('calendar-back').hidden=!dayOrigin;$('calendar-back').textContent=dayOrigin?'Back to my '+(dayOrigin.view==='w'?'week':'month'):'';Array.prototype.forEach.call($('sg').children,function(b){b.setAttribute('aria-pressed',b.dataset.v===vw?'true':'false');});
  $('text-contact').innerHTML=textUs();
- $('empty').hidden=items.length>0;
- $('mt').textContent=dayLabel();
- $('cv').innerHTML=dayAgenda();
+ $('empty').hidden=items.length>0;var h='',y=cur.getFullYear(),mo=cur.getMonth();
+ if(vw==='m'){
+  $('mt').textContent=cur.toLocaleString('en-US',{month:'long',year:'numeric'});
+  DN.forEach(function(d){h+='<div class="h">'+d+'</div>';});
+  var first=new Date(y,mo,1).getDay(),n=new Date(y,mo+1,0).getDate();
+  for(var i=0;i<first;i++)h+='<div></div>';
+  for(var d=1;d<=n;d++)h+=cell(new Date(y,mo,d));
+  for(var j=first+n;j<42;j++)h+='<div></div>';
+  $('cv').innerHTML='<div class="grid m">'+h+'</div>';
+ }else if(vw==='w'){
+  var s=new Date(cur);s.setDate(s.getDate()-s.getDay());var e=new Date(s);e.setDate(e.getDate()+6);
+  $('mt').textContent=s.toLocaleString('en-US',{month:'short',day:'numeric'})+' - '+e.toLocaleString('en-US',{month:'short',day:'numeric'});
+var ds=[];for(var i=0;i<7;i++){var x=new Date(s);x.setDate(s.getDate()+i);ds.push(x);}function stamp(x){return '<span class="wd">'+x.toLocaleDateString('en-US',{weekday:'short'})+'</span><span class="num">'+x.getDate()+'</span>';}function summary(){var selected=key(cur),l=on(selected);var un=l.filter(function(v){return !v.due_time;}),ti=l.filter(function(v){return v.due_time;});function row(v,rem){return '<div class="agenda-item'+(v.completed?' completed':'')+'"><button type="button" class="agenda-head" data-expand="'+v.id+'" aria-expanded="'+(expanded[v.id]?'true':'false')+'">'+completionMark(v)+timeLabel(v)+'<span class="agenda-title">'+esc(v.title)+'</span></button>'+(expanded[v.id]&&v.notes?'<div class="agenda-notes">'+displayNotes(v.notes)+'</div>':'')+(rem?'<div class="agenda-notes">'+esc(rem)+'</div>':'')+'</div>';}var h='<div class="option-summary"><p style="margin:2px 0 14px;font-size:20px;font-weight:700;color:var(--fg)">'+(selected===tk?'Today \u00b7 ':'')+new Date(selected+'T00:00:00').toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</p>';if(un.length){h+='<p style="margin:0 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600">Anytime today</p>'+un.map(function(v){return row(v,null);}).join('');}if(ti.length){h+='<p style="margin:'+(un.length?'18px':'0')+' 0 8px;font-size:12px;letter-spacing:.08em;text-transform:uppercase;color:var(--muted);font-weight:600">Scheduled</p>'+ti.map(function(v){return row(v,null);}).join('');}if(!l.length)h+='<p class="fine">Nothing planned.</p>';return h+'</div>';}
+h='<div class="week-choice"><div class="week-seven">'+ds.map(function(x){var k=key(x),l=on(k);return '<button data-day="'+k+'" class="'+(k===key(cur)?'today':'')+'">'+stamp(x)+'<span class="dot-row">'+l.slice(0,3).map(function(v){return '<i class="dot'+(v.completed?' done':'')+'"></i>';}).join('')+'</span><span class="tile-count">'+(l.length?(l.every(function(v){return v.completed;})?'<svg class="drawn-check" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg> ':l.filter(function(v){return v.completed;}).length+'/')+l.length:'—')+'</span></button>';}).join('')+'</div><p class="tap-hint">Tap a day to see its items. Tap an item for details.</p>'+summary()+'</div>';$('cv').innerHTML=h;
+ }else{
+  $('mt').textContent=cur.toLocaleString('en-US',{weekday:'short',month:'short',day:'numeric'});
+  var l=on(key(cur));
+  $('cv').innerHTML='<ul class="list dl">'+(l.length?l.map(function(x){return '<li class="'+(x.completed?'completed':'')+'"><div class="item-line">'+completionMark(x)+'<div class="item-copy">'+timeLabel(x)+'<b>'+esc(x.title)+'</b>'+(x.notes?'<small>'+displayNotes(x.notes)+'</small>':'')+'</div></div></li>';}).join(''):'<li class="fine">Nothing on this day. Text us something you promised. Once confirmed, it will show up here.</li>')+'</ul>';
+ }
 }
-function step(n){cur.setDate(cur.getDate()+n);render();}
+function step(n){if(vw==='m'){cur.setDate(1);cur.setMonth(cur.getMonth()+n);}else cur.setDate(cur.getDate()+7*n);render();}
 $('pv').onclick=function(){step(-1);};$('nx').onclick=function(){step(1);};
-
+Array.prototype.forEach.call($('sg').children,function(b){b.onclick=function(){dayOrigin=null;vw=b.dataset.v;Array.prototype.forEach.call($('sg').children,function(o){o.setAttribute('aria-pressed',o===b);});render();};});
 
 document.addEventListener('click',function(e){if(!$('mm').contains(e.target)&&!$('mb').contains(e.target)){$('mm').hidden=true;$('mb').setAttribute('aria-expanded','false');}});
 var user=null;
@@ -128,10 +144,10 @@ async function thoughts(){var pg=$('pg');pg.innerHTML='<a class="back-link" href
 
 
 
-var SUMMARY_DATA={};
+var SUMMARY_DATA={},sumCur=new Date();sumCur.setHours(0,0,0,0);
 function summaryFor(k){return SUMMARY_DATA[k]||null;}
-function renderSummaryPanel(){var el=$('sum-panel');var k=key(cur);
- var sm=$('smt');if(sm)sm.textContent=dayLabel();
+function renderSummaryPanel(){var el=$('sum-panel');var k=key(sumCur);
+ var sm=$('smt');if(sm)sm.textContent=sumDayLabel();
  if(!el)return;var d=summaryFor(k);
  var today=key(new Date()),fut=k>today;
  var h='';
@@ -145,10 +161,11 @@ function renderSummaryPanel(){var el=$('sum-panel');var k=key(cur);
  if(tho.length){h+='<div class="sum-seg"><h3>Thoughts</h3>'+tho.map(function(t){return '<p>'+esc(t)+'</p>';}).join('')+'</div>';}
  el.innerHTML=h;}
 
+function sumDayLabel(){var k=key(sumCur);return (k===key(new Date())?'Today \u00b7 ':'')+sumCur.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'});}
 function summaries(){var pg=$('pg');
  pg.innerHTML='<div class="nav"><button id="spv" aria-label="Previous day">&lt;</button><b id="smt"></b><button id="snx" aria-label="Next day">&gt;</button></div><div class="sum-panel" id="sum-panel" aria-live="polite"></div>';
- $('spv').onclick=function(){cur.setDate(cur.getDate()-1);renderSummaryPanel();};
- $('snx').onclick=function(){cur.setDate(cur.getDate()+1);renderSummaryPanel();};
+ $('spv').onclick=function(){sumCur.setDate(sumCur.getDate()-1);renderSummaryPanel();};
+ $('snx').onclick=function(){sumCur.setDate(sumCur.getDate()+1);renderSummaryPanel();};
  renderSummaryPanel();
  sb.from('daily_summaries').select('date,sections').order('date',{ascending:false}).limit(90).then(function(q){
   (q.data||[]).forEach(function(r){SUMMARY_DATA[r.date]=r.sections;});renderSummaryPanel();});}
