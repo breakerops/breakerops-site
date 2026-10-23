@@ -170,10 +170,13 @@ function summaries(){$('pg').innerHTML='<a class="back-link" href="#">Back to ca
 function settings(){ $('pg').innerHTML='<a class="back-link" href="#">Back to calendar</a><h1>Settings</h1><p class="settings-sub">Your account and connections.</p><div class="settings-group"><a class="settings-row" href="#logs">Information logs<span aria-hidden="true">&#8250;</span></a><a class="settings-row" href="#users">Add users<span aria-hidden="true">&#8250;</span></a><a class="settings-row" href="#profile">Profile<span aria-hidden="true">&#8250;</span></a></div><div class="settings-group"><a class="settings-row" href="#integrations">Integrations<span aria-hidden="true">&#8250;</span></a></div><button class="signout" type="button" onclick="signOut()">Sign out</button>'; }
 function integrations(){ $('pg').innerHTML=back()+'<h1>Integrations</h1><p class="settings-sub">Optional connections.</p><div class="settings-group"><div class="settings-row">Google Calendar<small>Not available yet</small></div><div class="settings-row">Outlook<small>Not available yet</small></div><div class="settings-row">Slack<small>Not available yet</small></div></div><p class="fine">We only read what you allow.</p>'; }
 function signOut(){sb.auth.signOut().then(function(){location.replace('/login/');});}
+function refresh(){return sb.from('calendar_items').select('id,title,due_date,due_time,notes,completed').order('due_date').then(function(q){items=q.data||[];render();renderSummaryPanel();});}
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&user)refresh();});
+setInterval(function(){if(!document.hidden&&user)refresh();},60000);
 sb.auth.getSession().then(function(r){
  if(!r.data.session){location.replace('/login/');return;}
  user=r.data.session.user;route();
- sb.from('calendar_items').select('id,title,due_date,due_time,notes,completed').order('due_date').then(function(q){items=q.data||[];render();renderSummaryPanel();});
+ refresh();
 });
 render();
 </script></body></html>
