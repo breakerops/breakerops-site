@@ -151,7 +151,18 @@ Deno.serve(async (req) => {
         : out.uncertain
         ? { status: "uncertain", error: out.error }   // held for review, never silently retried
         : { status: "failed", error: out.error };
-    await supabase.from("reminders").update(patch).eq("id", r.id);
+    // CAS the outcome write: land it only if the row is STILL 'claimed' by THIS
+    // claim generation (status + the attempts value this claim produced; a reclaim
+    // increments attempts, so a stale worker's write affects zero rows). A cancel/
+    // deactivate winning the race must survive - never overwrite it.
+    // LIMIT: on conflict the provider evidence (accepted id / attempted outcome) is
+    // returned in the function RESPONSE ONLY - the cron response can lose it and
+    // there is no durable ledger (that is the held schema batch, not this slice).
+    const { data: written, error: werr } = await supabase.from("reminders").update(patch).eq("id", r.id).eq("status", "claimed").eq("attempts", r.attempts).select("id");
+    if (werr || !written || written.length !== 1) {
+      results.push({ id: r.id, status: "conflict", attempted: patch.status, provider_id: out.providerId ?? null, error: "outcome write did not land on this claim generation (concurrent cancel/change/reclaim or write failure); row left as-is; provider evidence returned in this response only, not durably logged" });
+      continue;
+    }
     results.push({ id: r.id, ...patch });
   }
   return Response.json({ claimed: due?.length ?? 0, results });
