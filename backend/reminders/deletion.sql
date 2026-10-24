@@ -17,6 +17,7 @@
 
 -- Lifecycle flag: deactivated businesses are out of service before delete.
 alter table public.businesses add column if not exists lifecycle text not null default 'active';
+alter table public.businesses add column if not exists purged_at timestamptz;
 
 create or replace function public.deletion_preview(p_business uuid)
 returns table(scope text, item_count bigint)
@@ -49,8 +50,14 @@ begin
                  where business_id = p_business and user_id = auth.uid() and role = 'owner') then
     raise exception 'owner role required';
   end if;
-  -- mark out of service first: capture paths must check this before writing
-  update businesses set lifecycle = 'deactivated' where id = p_business;
+  -- Atomic active -> quiescing boundary: after this, no new send intents
+  -- (claim_due_reminders), no new enqueued work (v_due views), no rotation.
+  update businesses set lifecycle = 'quiescing'
+   where id = p_business and lifecycle = 'active';
+  -- already quiescing is fine (idempotent); anything else is a bug
+  if (select lifecycle from businesses where id = p_business) not in ('quiescing') then
+    raise exception 'business not in active/quiescing state';
+  end if;
   -- stop future brief enqueue
   update brief_subscriptions set active = false where business_id = p_business and active;
   get diagnostics n_briefs = row_count;
@@ -65,14 +72,17 @@ begin
       and not exists (select 1 from business_members m2
                       where m2.user_id = bm.user_id and m2.business_id <> p_business));
   get diagnostics n_push = row_count;
-  -- stop event-reminder and weekly-series enqueue sources
-  delete from calendar_items where business_id = p_business;
-  get diagnostics n_items = row_count;
-  delete from calendar_weekly_series where business_id = p_business;
-  get diagnostics n_series = row_count;
-  -- cancel everything not yet sent so reminders-send never picks it up
+  -- calendar items/series stay until purge: the v_due views already exclude
+  -- quiescing businesses, so keeping the rows cannot resurrect sends, and the
+  -- content survives for export until the final delete.
+  select count(*) into n_items from calendar_items where business_id = p_business;
+  select count(*) into n_series from calendar_weekly_series where business_id = p_business;
+  -- cancel only rows no worker has picked up. Claimed/accepted rows are NOT
+  -- relabelled: they are the drain barrier's evidence. Relabelling them
+  -- 'cancelled' would erase an unresolved in-flight/provider outcome and let
+  -- business_delete purge while a worker snapshot can still send.
   update reminders set status = 'cancelled'
-    where business_id = p_business and status in ('pending','claimed','accepted');
+    where business_id = p_business and status = 'pending';
   get diagnostics n_rem = row_count;
   return jsonb_build_object(
     'briefs_deactivated', n_briefs, 'day_tokens_removed', n_tokens,
@@ -89,14 +99,14 @@ begin
                  where business_id = p_business and user_id = auth.uid() and role = 'owner') then
     raise exception 'owner role required';
   end if;
-  -- refuse unless containment already ran: no live enqueue source or access
-  -- path may remain, otherwise crons would resurrect work after the delete.
+  -- Refuse unless quiesce already ran: no active brief subscription and no
+  -- customer access path may remain. Calendar items/series are content -
+  -- quiescing excludes them from every enqueue view, and this function
+  -- deletes them below.
   if exists (select 1 from brief_subscriptions where business_id = p_business and active)
      or exists (select 1 from day_tokens where business_id = p_business)
-     or exists (select 1 from calendar_items where business_id = p_business)
-     or exists (select 1 from calendar_weekly_series where business_id = p_business)
-     or (select lifecycle from businesses where id = p_business) is distinct from 'deactivated' then
-    raise exception 'deactivate first';
+     or (select lifecycle from businesses where id = p_business) is distinct from 'quiescing' then
+    raise exception 'quiesce first';
   end if;
   -- Drain barrier: never purge while anything could still be in flight.
   -- 'accepted' means the provider may have it; 'claimed' a worker may hold a
@@ -107,6 +117,8 @@ begin
     raise exception 'drain first: unsettled reminders remain';
   end if;
   delete from reminders where business_id = p_business;            get diagnostics n_rem = row_count;
+  delete from calendar_items where business_id = p_business;
+  delete from calendar_weekly_series where business_id = p_business;
   delete from thought_feedback where business_id = p_business;     get diagnostics n_tf = row_count;
   delete from business_thoughts where business_id = p_business;    get diagnostics n_bt = row_count;
   delete from daily_summaries where business_id = p_business;      get diagnostics n_ds = row_count;
@@ -114,11 +126,16 @@ begin
   delete from user_invites where business_id = p_business;         get diagnostics n_ui = row_count;
   delete from brief_subscriptions where business_id = p_business;  get diagnostics n_bs = row_count;
   delete from business_members where business_id = p_business;     get diagnostics n_bm = row_count;
-  delete from businesses where id = p_business;                    get diagnostics n_b = row_count;
+  -- Tombstone: the businesses row stays as a minimal reconciliation anchor
+  -- (id + lifecycle + purged_at) instead of vanishing. Provider ids,
+  -- usage_monthly, sms_opt_outs and inbound_events remain per the retention
+  -- carve-outs; nothing here claims backups/logs/provider copies are gone.
+  update businesses set lifecycle = 'purged', purged_at = now() where id = p_business;
+  get diagnostics n_b = row_count;
   return jsonb_build_object(
     'reminders', n_rem, 'thought_feedback', n_tf, 'business_thoughts', n_bt,
     'daily_summaries', n_ds, 'info_notes', n_in, 'user_invites', n_ui,
-    'brief_subscriptions', n_bs, 'business_members', n_bm, 'businesses', n_b);
+    'brief_subscriptions', n_bs, 'business_members', n_bm, 'tombstone', n_b);
 end $$;
 
 revoke all on function public.deletion_preview(uuid) from public, anon;
