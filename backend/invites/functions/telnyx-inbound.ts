@@ -48,12 +48,14 @@
 // Provider idempotency (Telnyx send-a-message docs, verified 2026-10-23):
 // the API accepts an Idempotency-Key header (UUIDv4 per logical operation;
 // same key + same payload replays the original response for up to 24h
-// instead of sending twice). The key is generated once and persisted in the
-// claim (idem_key) as part of the durable send intent, so a retry after ANY
-// crash is a safe same-key replay, never a blind resend. A stale 'sending'
-// claim is therefore resumed once with the SAME key rather than going
-// straight to uncertain; only an ambiguous answer (409 in-progress, 5xx,
-// network loss) leaves it uncertain for the desk.
+// instead of sending twice). The protection is BOUNDED: it covers only the
+// exact persisted payload, for 24h from the first attempt. The claim
+// therefore persists the FULL canonical payload (from/to/text/profile) and
+// first_attempt_at at intent time, and a stale 'sending' claim is resumed
+// only while inside a conservative 23h bound with both present; anything
+// older, missing or mismatched resolves to uncertain WITHOUT a fresh key or
+// send. A db_done claim (intent recorded, acceptance disproved or never
+// attempted) may be retried past the window because no duplicate is possible.
 // Retry classification (Telnyx command-retries doc): 429 = retryable (not
 // accepted); 400/401/403/404/422 = permanent, never retry unchanged;
 // 408/409/5xx/timeout/network = uncertain.
@@ -115,16 +117,21 @@ type SendOutcome =
   | { outcome: "failed"; error: string }     // other 4xx: permanent rejection
   | { outcome: "uncertain"; error: string }; // 5xx/408/timeout/network: unknown
 
-async function sendSms(to: string, text: string, idemKey: string): Promise<SendOutcome> {
-  const { data: rows, error: cerr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
+async function getApiKey(): Promise<string | null> {
+  const { data: rows, error } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
   const conn = rows?.[0];
-  if (cerr || !conn?.api_key || !conn?.meta?.from_number) return { outcome: "failed", error: "sms provider not configured" };
+  return error || !conn?.api_key ? null : conn.api_key;
+}
+
+// Sends the EXACT persisted payload - never rebuilt - so the idempotency
+// key always travels with byte-identical content.
+async function sendSms(payload: Record<string, string>, idemKey: string): Promise<SendOutcome> {
+  const apiKey = await getApiKey();
+  if (!apiKey) return { outcome: "failed", error: "sms provider not configured" };
   try {
-    const payload: Record<string, string> = { from: conn.meta.from_number, to, text };
-    if (conn.meta?.messaging_profile_id) payload.messaging_profile_id = conn.meta.messaging_profile_id;
     const res = await fetch("https://api.telnyx.com/v2/messages", {
       method: "POST",
-      headers: { Authorization: `Bearer ${conn.api_key}`, "Content-Type": "application/json", "Idempotency-Key": idemKey },
+      headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json", "Idempotency-Key": idemKey },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15_000),
     });
@@ -196,9 +203,9 @@ Deno.serve(async (req) => {
         .select("event_id");
       return !error && (data?.length ?? 0) === 1;
     };
-    const setClaimKey = async (status: string, detail: string, idemKey: string): Promise<boolean> => {
+    const setIntent = async (detail: string, idemKey: string, payload: Record<string, string>): Promise<boolean> => {
       const { data, error } = await supabase.from("inbound_events")
-        .update({ status, detail, idem_key: idemKey, ...bump })
+        .update({ status: "db_done", detail, idem_key: idemKey, payload, first_attempt_at: new Date().toISOString(), ...bump })
         .eq("event_id", eventId).eq("owner", attemptId)
         .select("event_id");
       return !error && (data?.length ?? 0) === 1;
@@ -223,13 +230,14 @@ Deno.serve(async (req) => {
 
     let resumeReply: string | null = null;
     let resumeIdemKey: string | null = null;
+    let resumePayload: Record<string, string> | null = null;
     const { error: derr } = await supabase.from("inbound_events").insert(
       { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from, status: "processing", owner: attemptId, version: 1 }
     );
     if (derr) {
       if ((derr as any).code !== "23505") return json({ error: "dedupe store unavailable" }, 500);
       const { data: ex, error: exErr } = await supabase.from("inbound_events")
-        .select("status, detail, updated_at, version, idem_key").eq("event_id", eventId).maybeSingle();
+        .select("status, detail, updated_at, version, idem_key, payload, first_attempt_at").eq("event_id", eventId).maybeSingle();
       if (exErr || !ex) return json({ error: "dedupe state unreadable" }, 500);
       if (ex.status === "done") return json({ ok: true, deduped: true });
       if (ex.status === "failed") {
@@ -249,6 +257,7 @@ Deno.serve(async (req) => {
         }
         resumeReply = ex.detail; // retry ONLY the persisted confirmation text
         resumeIdemKey = ex.idem_key ?? null; // with its original idempotency key
+        resumePayload = ex.payload ?? null;  // and the exact original payload
       } else {
         // 'processing' or 'sending': another worker owns it, or one crashed.
         const stale = Date.now() - Date.parse(ex.updated_at) > 120_000;
@@ -258,16 +267,27 @@ Deno.serve(async (req) => {
           return json({ error: "event in progress" }, 409);
         }
         if (ex.status === "sending") {
-          // Crash mid-attempt: acceptance is unknown, but the persisted
-          // idempotency key makes a same-key retry a safe replay, not a
-          // blind resend. Adopt and fall through to the send step with the
-          // ORIGINAL key; the provider replays the first response if the
-          // message was accepted.
+          // Crash mid-attempt: acceptance is unknown. A same-key retry is a
+          // safe replay ONLY inside the provider's 24h response-replay window
+          // (conservative bound: 23h) and only with the original payload and
+          // first-attempt time intact. Anything older or incomplete is held
+          // uncertain for the desk - no fresh key, no send.
+          const firstAttempt = Date.parse(ex.first_attempt_at ?? "");
+          const withinReplayWindow = Number.isFinite(firstAttempt)
+            && (Date.now() - firstAttempt) < 23 * 60 * 60 * 1000
+            && !!ex.idem_key && !!ex.payload;
+          if (!withinReplayWindow) {
+            if (!(await adoptClaim("sending", ex.version, { status: "uncertain", detail: "crashed during provider attempt; replay window expired or intent incomplete, held for reconciliation. intended: " + ex.detail }))) {
+              return json({ error: "event in progress" }, 409);
+            }
+            return json({ ok: true, deduped: true, held: "uncertain provider outcome; no automatic resend" });
+          }
           if (!(await adoptClaim("sending", ex.version, {}))) {
             return json({ error: "event in progress" }, 409);
           }
           resumeReply = ex.detail;
           resumeIdemKey = ex.idem_key ?? null;
+          resumePayload = ex.payload ?? null;
         }
         // Stale 'processing' reclaim: version CAS makes exactly one of any
         // number of stale readers the owner; the rest back off.
@@ -291,6 +311,7 @@ Deno.serve(async (req) => {
     ): Promise<Response> => {
       let effective = reply;
       let idemKey = resumeIdemKey;
+      let payload = resumePayload;
       if (resumeReply === null) {
         const stepErr = await dbStep();
         if (stepErr) {
@@ -298,22 +319,33 @@ Deno.serve(async (req) => {
           // provider redelivery (or stale reclaim) retries the whole event.
           return json({ error: stepErr + "; not confirmed" }, 500);
         }
-        // Durable send intent BEFORE sending, including the idempotency key
-        // every attempt of this confirmation will reuse. If it cannot be
-        // persisted there is no safe recovery from a crash, so do not send.
+        // Durable send intent BEFORE sending: the idempotency key AND the
+        // full canonical payload AND the first-attempt time, all immutable
+        // for the life of this claim. The payload is built once, now, from
+        // the current connection config - later attempts never rebuild it,
+        // so key and payload can never drift apart.
+        const { data: crows, error: connErr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
+        const conn = crows?.[0];
+        if (connErr || !conn?.api_key || !conn?.meta?.from_number) {
+          return json({ error: "sms provider not configured; not sent" }, 500);
+        }
+        payload = { from: conn.meta.from_number, to: from, text: reply };
+        if (conn.meta?.messaging_profile_id) payload.messaging_profile_id = conn.meta.messaging_profile_id;
         idemKey = crypto.randomUUID();
-        if (!(await setClaimKey("db_done", reply, idemKey))) {
+        if (!(await setIntent(reply, idemKey, payload))) {
           return json({ error: "could not persist send intent; not sent" }, 500);
         }
       } else {
         effective = resumeReply;
-        if (!idemKey) {
-          // claim predates key persistence: refuse to send unprotected
-          return json({ error: "claim has no idempotency key; held for reconciliation" }, 500);
+        if (!idemKey || !payload) {
+          // claim predates full intent persistence: refuse to send unprotected
+          return json({ error: "claim intent incomplete (key/payload); held for reconciliation" }, 500);
         }
       }
       if (gated) {
-        await setClaim("done", "send disabled: " + effective);
+        if (!(await setClaim("done", "send disabled: " + effective))) {
+          return json({ error: "outcome recording failed; claim left at db_done" }, 500);
+        }
         return json({ ok: true, status: statusLabel, send: "disabled" });
       }
       // Atomic pre-send turn, owner-scoped: this attempt must already own
@@ -325,26 +357,37 @@ Deno.serve(async (req) => {
       if (!(await claimSendTurn(effective))) {
         return json({ error: "event in progress" }, 409);
       }
-      const sent = await sendSms(from, effective, idemKey!);
+      const sent = await sendSms(payload!, idemKey!);
       if (sent.outcome === "sent") {
         // 2xx = accepted, not delivered; keep the provider id for the desk.
-        await setClaim("done", effective + (sent.providerId ? " [provider " + sent.providerId + "]" : ""));
+        if (!(await setClaim("done", effective + (sent.providerId ? " [provider " + sent.providerId + "]" : "")))) {
+          // Outcome write failed: claim stays 'sending'. Safe - a redelivery
+          // resumes with the SAME key inside the replay window and the
+          // provider replays this acceptance rather than double-sending.
+          return json({ error: "outcome recording failed; claim left at sending, same-key redelivery reconciles" }, 500);
+        }
         return json({ ok: true, status: statusLabel, send: "enabled", reply_sent: true, provider_id: sent.providerId ?? null });
       }
       if (sent.outcome === "retryable") {
         // 429 proves non-acceptance: return the claim to db_done so the
         // provider's redelivery retries ONLY the send (bounded by the
         // provider's own redelivery policy).
-        await takeClaim("sending", "db_done", effective);
+        if (!(await takeClaim("sending", "db_done", effective))) {
+          return json({ error: "rollback to retryable state failed; claim left at sending, same-key redelivery reconciles" }, 500);
+        }
         return json({ error: "confirmation rate-limited; will retry on redelivery: " + sent.error }, 500);
       }
       if (sent.outcome === "failed") {
         // Permanent rejection: the same payload would be refused again.
         // Terminal - record for the desk, never auto-retry.
-        await setClaim("failed", effective + " [" + sent.error + "]");
+        if (!(await setClaim("failed", effective + " [" + sent.error + "]"))) {
+          return json({ error: "failure recording failed; claim left at sending, same-key redelivery reconciles" }, 500);
+        }
         return json({ error: "confirmation permanently rejected; recorded, not retried: " + sent.error }, 500);
       }
-      await setClaim("uncertain", "provider outcome unknown after request; held for reconciliation, no automatic resend. intended: " + effective);
+      if (!(await setClaim("uncertain", "provider outcome unknown after request; held for reconciliation, no automatic resend. intended: " + effective))) {
+        return json({ error: "uncertainty recording failed; claim left at sending, same-key redelivery reconciles" }, 500);
+      }
       return json({ error: "provider outcome unknown; held for reconciliation, no automatic resend" }, 500);
     };
 
