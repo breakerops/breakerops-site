@@ -53,9 +53,10 @@
 // therefore persists the FULL canonical payload (from/to/text/profile) and
 // first_attempt_at at intent time, and a stale 'sending' claim is resumed
 // only while inside a conservative 23h bound with both present; anything
-// older, missing or mismatched resolves to uncertain WITHOUT a fresh key or
-// send. A db_done claim (intent recorded, acceptance disproved or never
-// attempted) may be retried past the window because no duplicate is possible.
+// older, missing, future or mismatched resolves to uncertain WITHOUT a fresh
+// key or send. NO resumed send bypasses this: a 429 on a resumed attempt
+// proves only that attempt was unaccepted - it cannot erase a prior
+// attempt's possible acceptance.
 // Retry classification (Telnyx command-retries doc): 429 = retryable (not
 // accepted); 400/401/403/404/422 = permanent, never retry unchanged;
 // 408/409/5xx/timeout/network = uncertain.
@@ -231,6 +232,7 @@ Deno.serve(async (req) => {
     let resumeReply: string | null = null;
     let resumeIdemKey: string | null = null;
     let resumePayload: Record<string, string> | null = null;
+    let resumeFirstAttempt: string | null = null;
     const { error: derr } = await supabase.from("inbound_events").insert(
       { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from, status: "processing", owner: attemptId, version: 1 }
     );
@@ -258,6 +260,7 @@ Deno.serve(async (req) => {
         resumeReply = ex.detail; // retry ONLY the persisted confirmation text
         resumeIdemKey = ex.idem_key ?? null; // with its original idempotency key
         resumePayload = ex.payload ?? null;  // and the exact original payload
+        resumeFirstAttempt = ex.first_attempt_at ?? null; // and its immutable attempt time
       } else {
         // 'processing' or 'sending': another worker owns it, or one crashed.
         const stale = Date.now() - Date.parse(ex.updated_at) > 120_000;
@@ -267,27 +270,16 @@ Deno.serve(async (req) => {
           return json({ error: "event in progress" }, 409);
         }
         if (ex.status === "sending") {
-          // Crash mid-attempt: acceptance is unknown. A same-key retry is a
-          // safe replay ONLY inside the provider's 24h response-replay window
-          // (conservative bound: 23h) and only with the original payload and
-          // first-attempt time intact. Anything older or incomplete is held
-          // uncertain for the desk - no fresh key, no send.
-          const firstAttempt = Date.parse(ex.first_attempt_at ?? "");
-          const withinReplayWindow = Number.isFinite(firstAttempt)
-            && (Date.now() - firstAttempt) < 23 * 60 * 60 * 1000
-            && !!ex.idem_key && !!ex.payload;
-          if (!withinReplayWindow) {
-            if (!(await adoptClaim("sending", ex.version, { status: "uncertain", detail: "crashed during provider attempt; replay window expired or intent incomplete, held for reconciliation. intended: " + ex.detail }))) {
-              return json({ error: "event in progress" }, 409);
-            }
-            return json({ ok: true, deduped: true, held: "uncertain provider outcome; no automatic resend" });
-          }
+          // Crash mid-attempt: acceptance is unknown. Adopt and resume with
+          // the ORIGINAL key and payload - the replay-window check in the
+          // shared resume path below decides whether any send is safe.
           if (!(await adoptClaim("sending", ex.version, {}))) {
             return json({ error: "event in progress" }, 409);
           }
           resumeReply = ex.detail;
           resumeIdemKey = ex.idem_key ?? null;
           resumePayload = ex.payload ?? null;
+          resumeFirstAttempt = ex.first_attempt_at ?? null;
         }
         // Stale 'processing' reclaim: version CAS makes exactly one of any
         // number of stale readers the owner; the rest back off.
@@ -337,9 +329,17 @@ Deno.serve(async (req) => {
         }
       } else {
         effective = resumeReply;
-        if (!idemKey || !payload) {
-          // claim predates full intent persistence: refuse to send unprotected
-          return json({ error: "claim intent incomplete (key/payload); held for reconciliation" }, 500);
+        // The idempotency guarantee is bounded: same key + same payload,
+        // within 24h of the FIRST attempt (conservative bound: 23h). A 429
+        // on a resumed attempt does NOT reset this - it cannot erase a prior
+        // attempt's possible acceptance. EVERY resumed send, whatever the
+        // claim status, must prove a sane in-window first attempt: missing,
+        // expired or future timestamps hold the claim for the desk.
+        const firstAttempt = Date.parse(resumeFirstAttempt ?? "");
+        const age = Date.now() - firstAttempt;
+        if (!idemKey || !payload || !Number.isFinite(firstAttempt) || age < 0 || age >= 23 * 60 * 60 * 1000) {
+          await setClaim("uncertain", "resumed send outside the provider replay window or intent incomplete; held for reconciliation - desk verifies with provider by idempotency key before any fresh send. intended: " + effective);
+          return json({ ok: true, deduped: true, held: "replay window expired or intent incomplete; no automatic resend" });
         }
       }
       if (gated) {
