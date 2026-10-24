@@ -38,9 +38,25 @@
 //     5xx, proxy/timeout, or a crash while sending). Held for desk
 //     reconciliation; a replay is acknowledged WITHOUT resending.
 //     Never blind-retry uncertain.
-// Every claim write checks both the error and the affected-row count; a
-// claim write that fails before the send blocks the send (no durable send
-// intent, no send).
+//   failed     - the provider DEFINITIVELY refused the message (permanent 4xx
+//     rejection). Terminal: no retry, no resend - replaying the same rejected
+//     payload would just be refused again. Replay is acknowledged.
+// Every claim write is a compare-and-swap keyed on the per-attempt owner id
+// (and a version for adoption races) and checks the affected-row count: a
+// worker that lost ownership can never clobber a later state, and a failed
+// claim write before the send blocks the send.
+// Provider idempotency (Telnyx send-a-message docs, verified 2026-10-23):
+// the API accepts an Idempotency-Key header (UUIDv4 per logical operation;
+// same key + same payload replays the original response for up to 24h
+// instead of sending twice). The key is generated once and persisted in the
+// claim (idem_key) as part of the durable send intent, so a retry after ANY
+// crash is a safe same-key replay, never a blind resend. A stale 'sending'
+// claim is therefore resumed once with the SAME key rather than going
+// straight to uncertain; only an ambiguous answer (409 in-progress, 5xx,
+// network loss) leaves it uncertain for the desk.
+// Retry classification (Telnyx command-retries doc): 429 = retryable (not
+// accepted); 400/401/403/404/422 = permanent, never retry unchanged;
+// 408/409/5xx/timeout/network = uncertain.
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const supabase = createClient(
@@ -95,10 +111,11 @@ function normalizePhone(raw: string): string | null {
 // so those are uncertain, exactly like a lost connection.
 type SendOutcome =
   | { outcome: "sent"; providerId?: string }
-  | { outcome: "failed"; error: string }
-  | { outcome: "uncertain"; error: string };
+  | { outcome: "retryable"; error: string }   // 429: provably not accepted
+  | { outcome: "failed"; error: string }     // other 4xx: permanent rejection
+  | { outcome: "uncertain"; error: string }; // 5xx/408/timeout/network: unknown
 
-async function sendSms(to: string, text: string): Promise<SendOutcome> {
+async function sendSms(to: string, text: string, idemKey: string): Promise<SendOutcome> {
   const { data: rows, error: cerr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
   const conn = rows?.[0];
   if (cerr || !conn?.api_key || !conn?.meta?.from_number) return { outcome: "failed", error: "sms provider not configured" };
@@ -107,7 +124,7 @@ async function sendSms(to: string, text: string): Promise<SendOutcome> {
     if (conn.meta?.messaging_profile_id) payload.messaging_profile_id = conn.meta.messaging_profile_id;
     const res = await fetch("https://api.telnyx.com/v2/messages", {
       method: "POST",
-      headers: { Authorization: `Bearer ${conn.api_key}`, "Content-Type": "application/json" },
+      headers: { Authorization: `Bearer ${conn.api_key}`, "Content-Type": "application/json", "Idempotency-Key": idemKey },
       body: JSON.stringify(payload),
       signal: AbortSignal.timeout(15_000),
     });
@@ -116,8 +133,16 @@ async function sendSms(to: string, text: string): Promise<SendOutcome> {
       try { providerId = (await res.json())?.data?.id; } catch { /* body optional */ }
       return { outcome: "sent", providerId };
     }
-    if (res.status >= 400 && res.status < 500) return { outcome: "failed", error: `telnyx ${res.status} (definitive rejection)` };
-    return { outcome: "uncertain", error: `telnyx ${res.status} (server-side; may have queued)` };
+    if (res.status === 429) return { outcome: "retryable", error: "telnyx 429 (rate limited; not accepted)" };
+    if ([400, 401, 403, 404, 422].includes(res.status)) {
+      // Telnyx retry doc: these reject the request as formed; the same
+      // payload would be refused again. 422 here would mean the payload
+      // drifted from the persisted key's original - either way, no retry.
+      return { outcome: "failed", error: `telnyx ${res.status} (permanent rejection)` };
+    }
+    // 408/409 (idempotency conflict: original still in flight), 5xx and any
+    // transport failure: acceptance unknown.
+    return { outcome: "uncertain", error: `telnyx ${res.status} (acceptance unknown)` };
   } catch (e) {
     return { outcome: "uncertain", error: String(e) };
   }
@@ -148,45 +173,82 @@ Deno.serve(async (req) => {
     const eventId = String(data.id ?? p?.id ?? "");
     if (!eventId) return json({ error: "no event id" }, 400);
 
-    // Checked claim write: returns true only when exactly this event's row
-    // was updated. A failed claim write before a send BLOCKS the send -
-    // without durable send intent there is no safe recovery.
+    // Every attempt gets its own owner id. All transitions are
+    // compare-and-swap: a write only lands for the current owner (and, for
+    // adoption, only against the exact version the worker read). Two stale
+    // readers can therefore never both reclaim; a worker that lost a race
+    // affects 0 rows and backs off instead of clobbering a later state.
+    const attemptId = crypto.randomUUID();
+    const bump = { updated_at: new Date().toISOString() };
     const setClaim = async (status: string, detail: string): Promise<boolean> => {
       const { data, error } = await supabase.from("inbound_events")
-        .update({ status, detail, updated_at: new Date().toISOString() })
-        .eq("event_id", eventId)
+        .update({ status, detail, ...bump })
+        .eq("event_id", eventId).eq("owner", attemptId)
         .select("event_id");
       return !error && (data?.length ?? 0) === 1;
     };
-    // Atomic ownership transition: succeeds only for the one worker whose
-    // conditional update actually flipped the row from the expected state.
     const takeClaim = async (fromStatus: string, toStatus: string, detail?: string): Promise<boolean> => {
-      const payload: Record<string, string> = { status: toStatus, updated_at: new Date().toISOString() };
+      const payload: Record<string, string> = { status: toStatus, ...bump };
       if (detail !== undefined) payload.detail = detail;
       const { data, error } = await supabase.from("inbound_events")
         .update(payload)
-        .eq("event_id", eventId).eq("status", fromStatus)
+        .eq("event_id", eventId).eq("owner", attemptId).eq("status", fromStatus)
+        .select("event_id");
+      return !error && (data?.length ?? 0) === 1;
+    };
+    const setClaimKey = async (status: string, detail: string, idemKey: string): Promise<boolean> => {
+      const { data, error } = await supabase.from("inbound_events")
+        .update({ status, detail, idem_key: idemKey, ...bump })
+        .eq("event_id", eventId).eq("owner", attemptId)
+        .select("event_id");
+      return !error && (data?.length ?? 0) === 1;
+    };
+    const claimSendTurn = async (detail: string): Promise<boolean> => {
+      const { data, error } = await supabase.from("inbound_events")
+        .update({ status: "sending", detail, ...bump })
+        .eq("event_id", eventId).eq("owner", attemptId)
+        .in("status", ["db_done", "sending"])
+        .select("event_id");
+      return !error && (data?.length ?? 0) === 1;
+    };
+    // Adoption CAS for claims this attempt did not insert (redeliveries):
+    // match the exact version read, flip owner to this attempt.
+    const adoptClaim = async (fromStatus: string, version: number, patch: Record<string, unknown>): Promise<boolean> => {
+      const { data, error } = await supabase.from("inbound_events")
+        .update({ ...patch, owner: attemptId, version: version + 1, ...bump })
+        .eq("event_id", eventId).eq("status", fromStatus).eq("version", version)
         .select("event_id");
       return !error && (data?.length ?? 0) === 1;
     };
 
     let resumeReply: string | null = null;
+    let resumeIdemKey: string | null = null;
     const { error: derr } = await supabase.from("inbound_events").insert(
-      { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from, status: "processing" }
+      { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from, status: "processing", owner: attemptId, version: 1 }
     );
     if (derr) {
       if ((derr as any).code !== "23505") return json({ error: "dedupe store unavailable" }, 500);
       const { data: ex, error: exErr } = await supabase.from("inbound_events")
-        .select("status, detail, updated_at").eq("event_id", eventId).maybeSingle();
+        .select("status, detail, updated_at, version, idem_key").eq("event_id", eventId).maybeSingle();
       if (exErr || !ex) return json({ error: "dedupe state unreadable" }, 500);
       if (ex.status === "done") return json({ ok: true, deduped: true });
+      if (ex.status === "failed") {
+        // Definitive permanent rejection: retrying the same payload would be
+        // refused again. Acknowledge, record, never resend.
+        return json({ ok: true, deduped: true, held: "provider permanently rejected this confirmation; recorded, not retried" });
+      }
       if (ex.status === "uncertain") {
         // A previous attempt may have reached the provider. Acknowledge the
         // replay WITHOUT resending; the desk reconciles from the claim row.
         return json({ ok: true, deduped: true, held: "uncertain provider outcome; no automatic resend" });
       }
       if (ex.status === "db_done") {
+        // Adopt with a version CAS; the loser backs off for the next retry.
+        if (!(await adoptClaim("db_done", ex.version, {}))) {
+          return json({ error: "event in progress" }, 409);
+        }
         resumeReply = ex.detail; // retry ONLY the persisted confirmation text
+        resumeIdemKey = ex.idem_key ?? null; // with its original idempotency key
       } else {
         // 'processing' or 'sending': another worker owns it, or one crashed.
         const stale = Date.now() - Date.parse(ex.updated_at) > 120_000;
@@ -196,17 +258,25 @@ Deno.serve(async (req) => {
           return json({ error: "event in progress" }, 409);
         }
         if (ex.status === "sending") {
-          // Crash mid-attempt: acceptance is unknown. Resolve to uncertain
-          // and hold - do NOT resume the send.
-          await setClaim("uncertain", "crashed during provider attempt; outcome unknown, held for reconciliation. intended: " + ex.detail);
-          return json({ ok: true, deduped: true, held: "uncertain provider outcome; no automatic resend" });
+          // Crash mid-attempt: acceptance is unknown, but the persisted
+          // idempotency key makes a same-key retry a safe replay, not a
+          // blind resend. Adopt and fall through to the send step with the
+          // ORIGINAL key; the provider replays the first response if the
+          // message was accepted.
+          if (!(await adoptClaim("sending", ex.version, {}))) {
+            return json({ error: "event in progress" }, 409);
+          }
+          resumeReply = ex.detail;
+          resumeIdemKey = ex.idem_key ?? null;
         }
-        // Atomic reclaim: only the worker whose update flips the stale row
-        // proceeds; the loser backs off for the provider's next retry.
-        if (!(await takeClaim("processing", "processing"))) {
-          return json({ error: "event in progress" }, 409);
+        // Stale 'processing' reclaim: version CAS makes exactly one of any
+        // number of stale readers the owner; the rest back off.
+        if (ex.status === "processing") {
+          if (!(await adoptClaim("processing", ex.version, {}))) {
+            return json({ error: "event in progress" }, 409);
+          }
+          // fall through: DB mutations below are idempotent, safe to re-run
         }
-        // fall through: DB mutations below are idempotent, safe to re-run
       }
     }
 
@@ -220,6 +290,7 @@ Deno.serve(async (req) => {
       dbStep: () => Promise<string | null>,
     ): Promise<Response> => {
       let effective = reply;
+      let idemKey = resumeIdemKey;
       if (resumeReply === null) {
         const stepErr = await dbStep();
         if (stepErr) {
@@ -227,35 +298,51 @@ Deno.serve(async (req) => {
           // provider redelivery (or stale reclaim) retries the whole event.
           return json({ error: stepErr + "; not confirmed" }, 500);
         }
-        // Durable send intent BEFORE sending; if it cannot be persisted,
-        // there is no safe recovery from a crash, so do not send.
-        if (!(await setClaim("db_done", reply))) {
+        // Durable send intent BEFORE sending, including the idempotency key
+        // every attempt of this confirmation will reuse. If it cannot be
+        // persisted there is no safe recovery from a crash, so do not send.
+        idemKey = crypto.randomUUID();
+        if (!(await setClaimKey("db_done", reply, idemKey))) {
           return json({ error: "could not persist send intent; not sent" }, 500);
         }
       } else {
         effective = resumeReply;
+        if (!idemKey) {
+          // claim predates key persistence: refuse to send unprotected
+          return json({ error: "claim has no idempotency key; held for reconciliation" }, 500);
+        }
       }
       if (gated) {
         await setClaim("done", "send disabled: " + effective);
         return json({ ok: true, status: statusLabel, send: "disabled" });
       }
-      // Atomic pre-send ownership: exactly one worker flips db_done ->
-      // sending. A concurrent replay/worker that loses the race backs off
-      // for the provider's retry instead of double-sending.
-      if (!(await takeClaim("db_done", "sending", effective))) {
+      // Atomic pre-send turn, owner-scoped: this attempt must already own
+      // the claim (via insert or adoption CAS) and the claim must be at a
+      // pre-send state. A concurrent replay/worker that lost ownership
+      // affects 0 rows and backs off for the provider's retry instead of
+      // double-sending. 'sending' is included so a crashed-then-adopted
+      // attempt can resume with its persisted idempotency key.
+      if (!(await claimSendTurn(effective))) {
         return json({ error: "event in progress" }, 409);
       }
-      const sent = await sendSms(from, effective);
+      const sent = await sendSms(from, effective, idemKey!);
       if (sent.outcome === "sent") {
         // 2xx = accepted, not delivered; keep the provider id for the desk.
         await setClaim("done", effective + (sent.providerId ? " [provider " + sent.providerId + "]" : ""));
         return json({ ok: true, status: statusLabel, send: "enabled", reply_sent: true, provider_id: sent.providerId ?? null });
       }
-      if (sent.outcome === "failed") {
-        // Definitive 4xx rejection: return the claim to db_done so the
-        // provider's redelivery retries ONLY the send.
+      if (sent.outcome === "retryable") {
+        // 429 proves non-acceptance: return the claim to db_done so the
+        // provider's redelivery retries ONLY the send (bounded by the
+        // provider's own redelivery policy).
         await takeClaim("sending", "db_done", effective);
-        return json({ error: "confirmation definitively rejected; will retry on redelivery: " + sent.error }, 500);
+        return json({ error: "confirmation rate-limited; will retry on redelivery: " + sent.error }, 500);
+      }
+      if (sent.outcome === "failed") {
+        // Permanent rejection: the same payload would be refused again.
+        // Terminal - record for the desk, never auto-retry.
+        await setClaim("failed", effective + " [" + sent.error + "]");
+        return json({ error: "confirmation permanently rejected; recorded, not retried: " + sent.error }, 500);
       }
       await setClaim("uncertain", "provider outcome unknown after request; held for reconciliation, no automatic resend. intended: " + effective);
       return json({ error: "provider outcome unknown; held for reconciliation, no automatic resend" }, 500);
