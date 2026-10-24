@@ -11,8 +11,13 @@
 --                conditional update; a stale row here resolves to uncertain
 --   done       - all side effects completed (or send disabled by gate);
 --                2xx means accepted (not delivered); provider id in detail
---   uncertain  - provider outcome unknown (no response, 5xx, timeout, crash
---                mid-send); never auto-resend; desk reconciles
+--   uncertain  - provider outcome unknown (no response, 5xx, timeout, 409
+--                idempotency conflict); never auto-resend; desk reconciles
+--   failed     - provider permanently rejected (400/401/403/404/422);
+--                terminal, never retried
+-- 429 is the only retryable outcome (provably not accepted). All transitions
+-- are owner+version compare-and-swap; the Telnyx Idempotency-Key is stored
+-- before the first send attempt so any retry is a safe provider-side replay.
 -- Claims are never deleted. Service-role only: no policies = default deny.
 create table if not exists public.inbound_events (
   event_id text primary key,                 -- Telnyx event record id
@@ -20,10 +25,16 @@ create table if not exists public.inbound_events (
   from_phone text,
   status text not null default 'processing',
   detail text not null default '',
+  owner text,                              -- per-attempt CAS owner id
+  version int not null default 1,          -- CAS version for adoption races
+  idem_key text,                           -- Telnyx Idempotency-Key, persisted with send intent
   received_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
 alter table public.inbound_events add column if not exists status text not null default 'processing';
 alter table public.inbound_events add column if not exists detail text not null default '';
 alter table public.inbound_events add column if not exists updated_at timestamptz not null default now();
+alter table public.inbound_events add column if not exists owner text;
+alter table public.inbound_events add column if not exists version int not null default 1;
+alter table public.inbound_events add column if not exists idem_key text;
 alter table public.inbound_events enable row level security;
