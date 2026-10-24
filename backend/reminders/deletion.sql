@@ -15,6 +15,9 @@
 -- desk decision. Backups, logs and provider copies are outside SQL scope and
 -- need their own schedule before anyone says "everything deleted".
 
+-- Lifecycle flag: deactivated businesses are out of service before delete.
+alter table public.businesses add column if not exists lifecycle text not null default 'active';
+
 create or replace function public.deletion_preview(p_business uuid)
 returns table(scope text, item_count bigint)
 language plpgsql security definer set search_path='public' as $$
@@ -46,6 +49,8 @@ begin
                  where business_id = p_business and user_id = auth.uid() and role = 'owner') then
     raise exception 'owner role required';
   end if;
+  -- mark out of service first: capture paths must check this before writing
+  update businesses set lifecycle = 'deactivated' where id = p_business;
   -- stop future brief enqueue
   update brief_subscriptions set active = false where business_id = p_business and active;
   get diagnostics n_briefs = row_count;
@@ -89,8 +94,17 @@ begin
   if exists (select 1 from brief_subscriptions where business_id = p_business and active)
      or exists (select 1 from day_tokens where business_id = p_business)
      or exists (select 1 from calendar_items where business_id = p_business)
-     or exists (select 1 from calendar_weekly_series where business_id = p_business) then
+     or exists (select 1 from calendar_weekly_series where business_id = p_business)
+     or (select lifecycle from businesses where id = p_business) is distinct from 'deactivated' then
     raise exception 'deactivate first';
+  end if;
+  -- Drain barrier: never purge while anything could still be in flight.
+  -- 'accepted' means the provider may have it; 'claimed' a worker may hold a
+  -- snapshot; 'pending' would be picked up. Wait for these to settle
+  -- (sent/failed/uncertain/cancelled) before the final delete.
+  if exists (select 1 from reminders where business_id = p_business
+             and status in ('pending','claimed','accepted')) then
+    raise exception 'drain first: unsettled reminders remain';
   end if;
   delete from reminders where business_id = p_business;            get diagnostics n_rem = row_count;
   delete from thought_feedback where business_id = p_business;     get diagnostics n_tf = row_count;
