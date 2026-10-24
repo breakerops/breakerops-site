@@ -28,6 +28,8 @@ create table if not exists public.inbound_events (
   owner text,                              -- per-attempt CAS owner id
   version int not null default 1,          -- CAS version for adoption races
   idem_key text,                           -- Telnyx Idempotency-Key, persisted with send intent
+  payload jsonb,                           -- canonical send payload, immutable (key+payload never drift)
+  first_attempt_at timestamptz,            -- immutable; 23h conservative replay-window bound
   received_at timestamptz not null default now(),
   updated_at timestamptz not null default now()
 );
@@ -37,4 +39,6 @@ alter table public.inbound_events add column if not exists updated_at timestampt
 alter table public.inbound_events add column if not exists owner text;
 alter table public.inbound_events add column if not exists version int not null default 1;
 alter table public.inbound_events add column if not exists idem_key text;
+alter table public.inbound_events add column if not exists payload jsonb;
+alter table public.inbound_events add column if not exists first_attempt_at timestamptz;
 alter table public.inbound_events enable row level security;
