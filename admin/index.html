@@ -252,7 +252,7 @@ function loadUsage(){
   $('u-plan').textContent=(plan.plan_texts!=null?plan.plan_texts:'-');
   $('u-over').textContent=(m.overage_texts!=null?m.overage_texts:0);
   var pc=(plan.plan_price_cents/100).toFixed(0),au=(plan.addon_user_cents/100).toFixed(0),oc=(plan.overage_cents||0);
-  $('u-line').textContent='Plan: $'+pc+'/month includes '+(plan.plan_texts||0).toLocaleString()+' texts account-wide. Extra users $'+au+'/month each. Overage '+oc+' cents per text.';
+  $('u-line').textContent='Plan: $'+pc+'/month per user. Text allowance target: '+(plan.plan_texts||0).toLocaleString()+'/month (provisional, scope pending). Paid overage disabled - allowance policy pending.';
  });
 }
 
