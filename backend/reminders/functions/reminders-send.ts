@@ -35,7 +35,7 @@ function fitsReply(text: string): boolean {
   return units <= 306; // 2 concatenated GSM-7 segments
 }
 
-type SendResult = { ok: boolean; accepted?: boolean; providerId?: string; error?: string; uncertain?: boolean };
+type SendResult = { ok: boolean; accepted?: boolean; providerId?: string; error?: string; uncertain?: boolean; cancelled?: boolean };
 
 function currentPreviewLinks(body: string): string {
   return body.replace(/(?<![\w@./-])(?:https?:\/\/)?(?:www\.)?breakerops\.com(?![\w.-])(?:\/[^\s<>"']*)?/gi, (raw) => {
@@ -76,6 +76,9 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
   if (channel === "sms") {
     body = mergeReply(body);
     if (!body || !fitsReply(body)) return { ok: false, error: "reply_needs_shortening: one reply, at most two SMS segments; nothing sent" };
+    // Honor STOP before any send (sms-terms promise). Row exists = opted out.
+    const { data: oo } = await supabase.from("sms_opt_outs").select("phone").eq("phone", to).maybeSingle();
+    if (oo) return { ok: false, cancelled: true, error: "recipient opted out (STOP honored); nothing sent" };
     const { data: rows, error: cerr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
     const conn = rows?.[0];
     if (cerr || !conn?.api_key) return { ok: false, error: "sms provider not configured" };
@@ -122,7 +125,9 @@ Deno.serve(async (req) => {
       ? out.accepted
         ? { status: "accepted", provider_id: out.providerId, accepted_at: new Date().toISOString(), error: null }
         : { status: "sent", provider_id: out.providerId, sent_at: new Date().toISOString(), error: null }
-      : out.uncertain
+      : out.cancelled
+        ? { status: "cancelled", error: out.error }   // deliberate non-send (opt-out); not a failure
+        : out.uncertain
         ? { status: "uncertain", error: out.error }   // held for review, never silently retried
         : { status: "failed", error: out.error };
     await supabase.from("reminders").update(patch).eq("id", r.id);
