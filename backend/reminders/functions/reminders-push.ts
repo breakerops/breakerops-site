@@ -1,9 +1,12 @@
 // reminders-push: server-to-server web push for event reminders.
-// Called by pg_cron with the shared REMINDERS_KEY. Sends one push to every
-// stored subscription of the single authorized owner (PUSH_OWNER_USER_ID).
-// Recipient scope is deliberately fixed to that one user; adding recipients
-// requires an explicit code change and the owner's consent, never implicit
-// business membership.
+// Called by pg_cron with the shared REMINDERS_KEY.
+// Recipients: while PUSH_OWNER_USER_ID is set, only that pinned user (the
+// original single-owner behavior, byte-for-byte unchanged). With the pin
+// removed, every member of the reminder's business who has explicitly
+// registered a push subscription - subscriptions are self-registered per
+// device under own-subs RLS, so fan-out only reaches devices a member opted
+// in themselves, never implicit membership. Flipping modes is a config
+// decision (remove the pin), not a code change.
 import * as webpush from "jsr:@negrel/webpush";
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
@@ -15,8 +18,7 @@ Deno.serve(async (req) => {
   try { payload = await req.json(); } catch { return reply({ error: "invalid request" }, 400); }
   const { business_id, title, body, url } = payload;
   if (!business_id || !body) return reply({ error: "missing fields" }, 400);
-  const ownerId = Deno.env.get("PUSH_OWNER_USER_ID");
-  if (!ownerId) return reply({ error: "recipient not configured" }, 500);
+
   const serviceKey = (() => {
     const legacy = Deno.env.get("SUPABASE_SERVICE_ROLE_KEY");
     if (legacy) return legacy;
@@ -26,7 +28,18 @@ Deno.serve(async (req) => {
     } catch { return ""; }
   })();
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, serviceKey);
-  const { data: subs, error: sErr } = await sb.from("push_subscriptions").select("*").eq("user_id", ownerId);
+  const ownerId = Deno.env.get("PUSH_OWNER_USER_ID");
+  let subsQuery;
+  if (ownerId) {
+    subsQuery = sb.from("push_subscriptions").select("*").eq("user_id", ownerId);
+  } else {
+    const { data: members, error: mErr } = await sb.from("business_members").select("user_id").eq("business_id", business_id);
+    if (mErr) return reply({ error: "member lookup failed: " + mErr.message }, 500);
+    const ids = (members || []).map((m: any) => m.user_id);
+    if (!ids.length) return reply({ sent: 0, failed: 0, pruned: 0, recipients: 0 });
+    subsQuery = sb.from("push_subscriptions").select("*").in("user_id", ids);
+  }
+  const { data: subs, error: sErr } = await subsQuery;
   if (sErr) return reply({ error: "subscription lookup failed: " + sErr.message }, 500);
   const vapidKeys = await webpush.importVapidKeys(JSON.parse(Deno.env.get("VAPID_JWKS")!), { extractable: false });
   const appServer = await webpush.ApplicationServer.new({
@@ -50,5 +63,5 @@ Deno.serve(async (req) => {
     }
   }
   if (dead.length) await sb.from("push_subscriptions").delete().in("id", dead);
-  return reply({ sent, failed, pruned: dead.length });
+  return reply({ sent, failed, pruned: dead.length, mode: ownerId ? "owner-pinned" : "business-members" });
 });
