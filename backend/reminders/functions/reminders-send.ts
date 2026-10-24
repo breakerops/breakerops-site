@@ -121,6 +121,14 @@ Deno.serve(async (req) => {
 
   const results = [];
   for (const r of due ?? []) {
+    // Pre-send re-check: a cancel/deactivate landing AFTER claim must stop the
+    // send. Narrows the check-to-send race; the deletion drain barrier plus a
+    // settle window is the real guard - this is defense in depth, not proof.
+    const { data: cur } = await supabase.from("reminders").select("status").eq("id", r.id).maybeSingle();
+    if (cur?.status !== "claimed") {
+      results.push({ id: r.id, status: "skipped", error: "no longer claimed (cancelled/deactivated after claim)" });
+      continue;
+    }
     const out = await sendVia(r.recipient_channel, r.recipient, r.body);
     const patch = out.ok
       ? out.accepted
