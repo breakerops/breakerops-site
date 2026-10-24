@@ -14,6 +14,10 @@ begin
   if not is_member(p_business) then
     raise exception 'forbidden';
   end if;
+  -- a deactivated/deleting business is out of service: no new access artifacts
+  if (select lifecycle from businesses where id = p_business) is distinct from 'active' then
+    raise exception 'business not active';
+  end if;
   new_tok := replace(gen_random_uuid()::text || gen_random_uuid()::text, '-', '');
   insert into day_tokens (business_id, token)
   values (p_business, new_tok)
