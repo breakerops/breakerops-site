@@ -77,7 +77,8 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
     body = mergeReply(body);
     if (!body || !fitsReply(body)) return { ok: false, error: "reply_needs_shortening: one reply, at most two SMS segments; nothing sent" };
     // Honor STOP before any send (sms-terms promise). Row exists = opted out.
-    const { data: oo } = await supabase.from("sms_opt_outs").select("phone").eq("phone", to).maybeSingle();
+    const { data: oo, error: ooErr } = await supabase.from("sms_opt_outs").select("phone").eq("phone", to).maybeSingle();
+    if (ooErr) return { ok: false, uncertain: true, error: "opt-out state unreadable; nothing sent (fail closed)" };
     if (oo) return { ok: false, cancelled: true, error: "recipient opted out (STOP honored); nothing sent" };
     const { data: rows, error: cerr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
     const conn = rows?.[0];
