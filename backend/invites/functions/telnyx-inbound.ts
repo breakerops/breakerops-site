@@ -60,6 +60,27 @@ function normalizePhone(raw: string): string | null {
   return null;
 }
 
+// Compliance auto-replies (STOP/START/HELP) are carrier-required responses,
+// not marketing. They use the same Telnyx connection as reminders-send and
+// are gated by TELNYX_SEND_ENABLED like every other outbound text.
+async function sendSms(to: string, text: string): Promise<{ ok: boolean; error?: string }> {
+  const { data: rows, error: cerr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
+  const conn = rows?.[0];
+  if (cerr || !conn?.api_key || !conn?.meta?.from_number) return { ok: false, error: "sms provider not configured" };
+  try {
+    const payload: Record<string, string> = { from: conn.meta.from_number, to, text };
+    if (conn.meta?.messaging_profile_id) payload.messaging_profile_id = conn.meta.messaging_profile_id;
+    const res = await fetch("https://api.telnyx.com/v2/messages", {
+      method: "POST",
+      headers: { Authorization: `Bearer ${conn.api_key}`, "Content-Type": "application/json" },
+      body: JSON.stringify(payload),
+    });
+    return res.ok ? { ok: true } : { ok: false, error: `telnyx ${res.status}` };
+  } catch (e) {
+    return { ok: false, error: String(e) };
+  }
+}
+
 Deno.serve(async (req) => {
   const rawBody = await req.text();
   if (!(await verifyTelnyx(req, rawBody))) {
@@ -77,8 +98,34 @@ Deno.serve(async (req) => {
     const text = String(p?.text ?? "").slice(0, 1000);
     if (!from) return json({ error: "no sender" }, 400);
 
-    const { data: admission, error } = await supabase.rpc("invite_redeem_on_inbound", { p_phone: from });
     const gated = Deno.env.get("TELNYX_SEND_ENABLED") !== "true";
+
+    // STOP/START/HELP per the published sms-terms. These short-circuit all
+    // other routing; the confirmation text is the "one final text" the terms
+    // promise. Opt-out rows are honored by reminders-send before every send.
+    const kw = text.trim().toUpperCase().replace(/\s+/g, " ");
+    if (["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(kw)) {
+      await supabase.from("sms_opt_outs").upsert(
+        { phone: from, opted_out_at: new Date().toISOString(), keyword: kw },
+        { onConflict: "phone" }
+      );
+      const reply = "BreakerOps: You are unsubscribed and will receive no more texts. Reply START to resubscribe.";
+      const sent = gated ? { ok: false, error: "send disabled" } : await sendSms(from, reply);
+      return json({ ok: true, status: "opted_out", send: gated ? "disabled" : "enabled", reply_sent: sent.ok, reply_error: sent.error ?? null });
+    }
+    if (["START", "UNSTOP"].includes(kw)) {
+      await supabase.from("sms_opt_outs").delete().eq("phone", from);
+      const reply = "BreakerOps: You are resubscribed to texts. Reply STOP to opt out, HELP for help. Msg&data rates may apply.";
+      const sent = gated ? { ok: false, error: "send disabled" } : await sendSms(from, reply);
+      return json({ ok: true, status: "opted_in", send: gated ? "disabled" : "enabled", reply_sent: sent.ok, reply_error: sent.error ?? null });
+    }
+    if (kw === "HELP") {
+      const reply = "BreakerOps: morning day text + reminders you ask for. Reply STOP to opt out. Msg&data rates may apply. Help: matt@breakerops.com";
+      const sent = gated ? { ok: false, error: "send disabled" } : await sendSms(from, reply);
+      return json({ ok: true, status: "help", send: gated ? "disabled" : "enabled", reply_sent: sent.ok, reply_error: sent.error ?? null });
+    }
+
+    const { data: admission, error } = await supabase.rpc("invite_redeem_on_inbound", { p_phone: from });
     if (error) {
       // activation disabled or a data problem: log for the desk, never reply blindly
       return json({ ok: true, status: "unrouted", reason: String(error.message || error), send: "disabled" });
