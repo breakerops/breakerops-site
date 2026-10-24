@@ -6,8 +6,13 @@
 --   processing - claimed, side effects not yet durable (stale >2min reclaimed)
 --   db_done    - mutation verified durable; confirmation text persisted in
 --                detail BEFORE any send attempt; redelivery retries send only
---   done       - all side effects completed (or send disabled by gate)
---   uncertain  - provider outcome unknown (no HTTP response); never auto-resend
+--                (a 4xx is the only outcome that proves non-acceptance)
+--   sending    - provider attempt in flight; entered only via an atomic
+--                conditional update; a stale row here resolves to uncertain
+--   done       - all side effects completed (or send disabled by gate);
+--                2xx means accepted (not delivered); provider id in detail
+--   uncertain  - provider outcome unknown (no response, 5xx, timeout, crash
+--                mid-send); never auto-resend; desk reconciles
 -- Claims are never deleted. Service-role only: no policies = default deny.
 create table if not exists public.inbound_events (
   event_id text primary key,                 -- Telnyx event record id
