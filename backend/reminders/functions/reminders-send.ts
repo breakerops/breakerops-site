@@ -71,7 +71,13 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
           to, subject: "BreakerOps reminder", text: body,
         }),
       });
-      if (res.ok) return { ok: true, providerId: (await res.json()).id };
+      if (res.ok) {
+        const pid = (await res.json())?.id;
+        // A 2xx WITHOUT a usable provider id is not acceptance evidence: hold
+        // unresolved. Usable = non-blank string; no other format constraint.
+        if (typeof pid !== "string" || pid.trim() === "") return { ok: false, uncertain: true, error: `resend ${res.status}: 2xx without usable provider id; outcome unresolved` };
+        return { ok: true, providerId: pid };
+      }
       return { ok: false, error: `resend ${res.status}` };        // clear rejection: retryable later
     } catch (e) {
       return { ok: false, uncertain: true, error: String(e) };    // unknown network outcome
@@ -107,7 +113,13 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
         throw e;
       });
       // 200 = accepted by Telnyx, NOT delivered. telnyx-webhook finalizes.
-      if (res.ok) return { ok: true, accepted: true, providerId: j?.data?.id };
+      // A 2xx WITHOUT a provider id is not acceptance evidence: hold unresolved.
+      if (res.ok) {
+        const pid = j?.data?.id;
+        // Usable = non-blank string; truthy junk (number/bool/object/whitespace) held.
+        if (typeof pid !== "string" || pid.trim() === "") return { ok: false, uncertain: true, error: `telnyx ${res.status}: 2xx without usable provider id; outcome unresolved` };
+        return { ok: true, accepted: true, providerId: pid };
+      }
       return { ok: false, error: `telnyx ${res.status}: ${JSON.stringify(j?.errors ?? j).slice(0, 300)}` };
     } catch (e) {
       return { ok: false, uncertain: true, error: String(e) };
