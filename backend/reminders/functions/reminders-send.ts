@@ -10,6 +10,9 @@
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 
 const SHARED_KEY = Deno.env.get("REMINDERS_KEY") ?? "";
+// Hung provider connection or a body read failing mid-stream rejects (TimeoutError
+// from AbortSignal.timeout, TypeError on stream reset) -> existing catch -> uncertain.
+const FETCH_TIMEOUT_MS = 10_000;
 const supabase = createClient(
   Deno.env.get("SUPABASE_URL")!,
   Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!,
@@ -61,6 +64,7 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
     try {
       const res = await fetch("https://api.resend.com/emails", {
         method: "POST",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: { Authorization: `Bearer ${key}`, "Content-Type": "application/json" },
         body: JSON.stringify({
           from: "BreakerOps <auth@breakerops.com>",
@@ -90,10 +94,18 @@ async function sendVia(channel: string, to: string, body: string): Promise<SendR
       if (conn.meta?.messaging_profile_id) payload.messaging_profile_id = conn.meta.messaging_profile_id;
       const res = await fetch("https://api.telnyx.com/v2/messages", {
         method: "POST",
+        signal: AbortSignal.timeout(FETCH_TIMEOUT_MS),
         headers: { Authorization: `Bearer ${conn.api_key}`, "Content-Type": "application/json" },
         body: JSON.stringify(payload),
       });
-      const j = await res.json().catch(() => ({}));
+      // Body read/parse: a SyntaxError means the response COMPLETED with malformed
+      // JSON - tolerate as baseline. ANY other body failure (TimeoutError from the
+      // abort signal, TypeError stream reset, etc.) means the outcome is unknown:
+      // rethrow so it reaches the outer uncertain catch; never fabricate {} evidence.
+      const j = await res.json().catch((e) => {
+        if (e instanceof SyntaxError) return {};
+        throw e;
+      });
       // 200 = accepted by Telnyx, NOT delivered. telnyx-webhook finalizes.
       if (res.ok) return { ok: true, accepted: true, providerId: j?.data?.id };
       return { ok: false, error: `telnyx ${res.status}: ${JSON.stringify(j?.errors ?? j).slice(0, 300)}` };
