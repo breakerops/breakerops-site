@@ -98,6 +98,28 @@ Deno.serve(async (req) => {
     const text = String(p?.text ?? "").slice(0, 1000);
     if (!from) return json({ error: "no sender" }, 400);
 
+    // Idempotency: the 5-minute timestamp window is replay rejection, not
+    // dedupe - a valid replay inside the window must not repeat side effects
+    // (e.g. duplicate final STOP confirmations). Persist the provider event id
+    // first; a conflict means this event was already processed. Fail closed
+    // when the dedupe store is unavailable: no side effects without it.
+    const eventId = String(data.id ?? p?.id ?? "");
+    if (!eventId) return json({ error: "no event id" }, 400);
+    const { error: derr } = await supabase.from("inbound_events").insert(
+      { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from }
+    );
+    if (derr) {
+      if ((derr as any).code === "23505") return json({ ok: true, deduped: true });
+      return json({ error: "dedupe store unavailable" }, 500);
+    }
+
+    // Retry safety: dedupe marks COMPLETED processing only. If a side effect
+    // fails after the marker insert, remove it before returning 5xx so the
+    // provider's redelivery reprocesses instead of being skipped as a dupe.
+    const undoDedupe = async () => {
+      await supabase.from("inbound_events").delete().eq("event_id", eventId);
+    };
+
     const gated = Deno.env.get("TELNYX_SEND_ENABLED") !== "true";
 
     // STOP/START/HELP per the published sms-terms. These short-circuit all
@@ -105,23 +127,33 @@ Deno.serve(async (req) => {
     // promise. Opt-out rows are honored by reminders-send before every send.
     const kw = text.trim().toUpperCase().replace(/\s+/g, " ");
     if (["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(kw)) {
-      await supabase.from("sms_opt_outs").upsert(
+      const { error: oerr } = await supabase.from("sms_opt_outs").upsert(
         { phone: from, opted_out_at: new Date().toISOString(), keyword: kw },
         { onConflict: "phone" }
       );
+      if (oerr) { await undoDedupe(); return json({ error: "opt-out store failed; not confirmed" }, 500); }
+      // Confirm only what is durable: re-read before the "one final text".
+      const { data: chk, error: cerr } = await supabase.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
+      if (cerr || !chk) { await undoDedupe(); return json({ error: "opt-out state not durable; not confirmed" }, 500); }
       const reply = "BreakerOps: You are unsubscribed and will receive no more texts. Reply START to resubscribe.";
       const sent = gated ? { ok: false, error: "send disabled" } : await sendSms(from, reply);
+      if (!gated && !sent.ok) { await undoDedupe(); return json({ error: "confirmation send failed; will retry on redelivery" }, 500); }
       return json({ ok: true, status: "opted_out", send: gated ? "disabled" : "enabled", reply_sent: sent.ok, reply_error: sent.error ?? null });
     }
     if (["START", "UNSTOP"].includes(kw)) {
-      await supabase.from("sms_opt_outs").delete().eq("phone", from);
+      const { error: derr2 } = await supabase.from("sms_opt_outs").delete().eq("phone", from);
+      if (derr2) { await undoDedupe(); return json({ error: "opt-in store failed; not confirmed" }, 500); }
+      const { data: still, error: serr } = await supabase.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
+      if (serr || still) { await undoDedupe(); return json({ error: "opt-in state not durable; not confirmed" }, 500); }
       const reply = "BreakerOps: You are resubscribed to texts. Reply STOP to opt out, HELP for help. Msg&data rates may apply.";
       const sent = gated ? { ok: false, error: "send disabled" } : await sendSms(from, reply);
+      if (!gated && !sent.ok) { await undoDedupe(); return json({ error: "confirmation send failed; will retry on redelivery" }, 500); }
       return json({ ok: true, status: "opted_in", send: gated ? "disabled" : "enabled", reply_sent: sent.ok, reply_error: sent.error ?? null });
     }
     if (kw === "HELP") {
       const reply = "BreakerOps: morning day text + reminders you ask for. Reply STOP to opt out. Msg&data rates may apply. Help: matt@breakerops.com";
       const sent = gated ? { ok: false, error: "send disabled" } : await sendSms(from, reply);
+      if (!gated && !sent.ok) { await undoDedupe(); return json({ error: "confirmation send failed; will retry on redelivery" }, 500); }
       return json({ ok: true, status: "help", send: gated ? "disabled" : "enabled", reply_sent: sent.ok, reply_error: sent.error ?? null });
     }
 
@@ -131,11 +163,13 @@ Deno.serve(async (req) => {
       return json({ ok: true, status: "unrouted", reason: String(error.message || error), send: "disabled" });
     }
     const status = admission?.status ?? "none";
-    // Routing, all concierge until the Matt handler is built:
+    // STUB: no durable routing/capture exists yet. Nothing below acknowledges
+    // customer capture, stores the message, or truncates it into a record -
+    // the desk watches function logs until the Matt handler owns routing.
     //  admitted -> welcome text from Matt + notify the inviter (both gated)
     //  member   -> Matt conversation (desk today)
     //  none     -> existing public lead path (desk notification)
-    return json({ ok: true, status, send: gated ? "disabled" : "enabled", preview: text.slice(0, 80) });
+    return json({ ok: true, status, routing: "stub-no-durable-capture", captured: false, send: gated ? "disabled" : "enabled" });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
