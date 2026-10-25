@@ -109,7 +109,9 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         if (rpcFaults.claim_keyword-- > 0) return { data: null, error: { message: "tx aborted" } }; // crash: NOTHING lands
         // v3.2 semantics: occurred_at guard with per-phone state + unknown flag
         const occurred = a.p_occurred_at ? Date.parse(a.p_occurred_at) : NaN;
-        const occ = Number.isFinite(occurred) ? occurred : null;
+        const occRaw = Number.isFinite(occurred) ? occurred : null;
+        // distrust filter FIRST (PG parity): future/implausibly-old -> unknown
+        const occ = (occRaw !== null && (occRaw > Date.now() || occRaw < Date.parse("2020-01-01T00:00:00Z"))) ? null : occRaw;
         let st = kwState.get(a.p_from_phone);
         // read-side poisoned-anchor repair happens BEFORE stale evaluation
         if (st && st.lastOccurredAt !== null && st.lastOccurredAt > Date.now()) {
@@ -119,7 +121,7 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         if (st && st.lastOccurredAt !== null && occ !== null && occ < st.lastOccurredAt) claimStatus = "stale_event";
         // v3.5: ANY future timestamp distrusted; horizon blocks ALL optins
         // (no cross-clock auto-apply without a grounded skew bound)
-        const occEff = occ !== null && occ > Date.now() ? null : occ;
+        const occEff = occ;
         let claimStatus2 = claimStatus;
         if (a.p_action === "optin" && claimStatus === "processing" && (occEff === null
           || (st && st.unknownHorizon !== null)
@@ -621,6 +623,33 @@ const STOP = "STOP";
   release();
   await Promise.all(bgTasks.splice(0));
   ok(sends.length === 1, "background flow then completes the confirmation");
+}
+
+
+// 48: F-D - bogus-low/non-finite occurred_at treated as unknown, never dropped as stale
+{
+  const { h, inbound, optouts } = makeWorld({ sendGate: false });
+  await h(signedReq(evt("START", "evt-48a", "+15551234567", "2026-10-25T04:00:00Z"))); // anchors optin
+  const r = await h(signedReq(evt(STOP, "evt-48b", "+15551234567", "0001-01-01T00:00:00Z")));
+  const j = await r.json();
+  ok(j.accepted === true && optouts.rows.length === 1,
+    "bogus-low STOP: treated as unknown, applies on the safe side - never dropped as stale");
+  const claim = inbound.rows.find((r) => r.event_id === "evt-48b");
+  ok(claim.occurred_at === null, "bogus-low timestamp not stored as if real");
+}
+// 49: sweep stage B/C - a send already dispatched completes; outcome CAS fails against a swept row
+{
+  let release!: () => void;
+  const latch = new Promise<void>((res) => { release = res; });
+  const { rawH, bgTasks, inbound, sends } = makeWorld({ sendGate: false, sendLatch: latch });
+  await rawH(signedReq(evt(STOP, "evt-49")));
+  await new Promise((r) => setTimeout(r, 10)); // let the background flow reach the latch-blocked send ('sending')
+  // mid-flow: sweep flips the row while the provider call is in flight
+  inbound.rows[0].status = "uncertain";
+  release();
+  await Promise.all(bgTasks.splice(0));
+  ok(sends.length === 1 && inbound.rows[0].status === "uncertain",
+    "stage B/C: dispatched send completes (irreversible), outcome CAS fails, row stays uncertain for desk - never a duplicate");
 }
 
 console.log(`all ${passed} checks passed`);
