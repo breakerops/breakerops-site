@@ -171,6 +171,11 @@ async function sendSms(store: TelnyxStore, payload: Record<string, string>, idem
   }
 }
 
+// Per-claim retry pacing floor after a provider 429 (per-claim only, NOT
+// provider-wide rate limiting). The 429 rollback stamps next_attempt_at this
+// far ahead; the resume RPC refuses to re-drive the claim before then.
+export const RESUME_BACKOFF_MS = 2 * 60 * 1000;
+
 // Shared send-turn: the exact CAS + send + outcome-write sequence both the
 // webhook handler and the durable resume worker drive. Single source so the
 // two consumers can never drift. All writes are owner-scoped CAS with
@@ -205,6 +210,13 @@ export async function runSendTurn(a: SendTurnArgs): Promise<{ outcome: SendTurnO
     if (detail !== undefined) payload.detail = detail;
     const { data, error } = await a.store.from("inbound_events")
       .update(payload)
+      .eq("event_id", a.eventId).eq("owner", a.attemptId).eq("status", fromStatus)
+      .select("event_id");
+    return !error && (data?.length ?? 0) === 1;
+  };
+  const takeClaimNext = async (fromStatus: string, toStatus: string, detail: string, nextAttemptAt: string): Promise<boolean> => {
+    const { data, error } = await a.store.from("inbound_events")
+      .update({ status: toStatus, detail, next_attempt_at: nextAttemptAt, ...bump })
       .eq("event_id", a.eventId).eq("owner", a.attemptId).eq("status", fromStatus)
       .select("event_id");
     return !error && (data?.length ?? 0) === 1;
@@ -254,8 +266,13 @@ export async function runSendTurn(a: SendTurnArgs): Promise<{ outcome: SendTurnO
   }
   if (sent.outcome === "retryable") {
     // 429 proves non-acceptance: return the claim to db_done so a redelivery
-    // (or the resume worker) retries ONLY the send.
-    if (!(await takeClaim("sending", "db_done", effective))) {
+    // (or the resume worker) retries ONLY the send. The rollback stamps an
+    // EXPLICIT next_attempt_at (RESUME_BACKOFF_MS from now): the resume RPC
+    // will not re-drive this claim before it. Per-claim pacing only - NOT
+    // provider-wide rate protection. The replay window (first_attempt_at)
+    // is never touched.
+    const nextAt = new Date(a.now() + RESUME_BACKOFF_MS).toISOString();
+    if (!(await takeClaimNext("sending", "db_done", effective, nextAt))) {
       return { outcome: "write_failed", detail: "rollback to retryable state failed; claim left at sending, same-key redelivery reconciles" };
     }
     return { outcome: "retryable", detail: sent.error ?? "rate-limited" };
@@ -304,7 +321,9 @@ export function createTelnyxResumeWorker(deps: TelnyxDeps) {
     if (error) return { adopted: false, detail: "resume claim unavailable: " + ((error as any)?.message ?? String(error)) };
     const row = (rows as any[])?.[0];
     if (!row) return { adopted: false };
-    const intended = String(row.detail ?? "");
+    // Canonical send text comes from the persisted PAYLOAD, never the
+    // accumulating audit detail (which adoption annotations append to).
+    const intended = String(row.payload?.text ?? row.detail ?? "");
     if (resumeWindowError(row.idem_key ?? null, row.payload ?? null, row.first_attempt_at ?? null, now)) {
       const bump = { updated_at: new Date(now()).toISOString() };
       await store.from("inbound_events")
@@ -487,7 +506,7 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
         if (!(await adoptClaim("db_done", ex.version, {}))) {
           return json({ error: "event in progress" }, 409);
         }
-        resumeReply = ex.detail; // retry ONLY the persisted confirmation text
+        resumeReply = ex.payload?.text ?? ex.detail; // canonical text from the persisted PAYLOAD (detail is audit-only)
         resumeIdemKey = ex.idem_key ?? null; // with its original idempotency key
         resumePayload = ex.payload ?? null;  // and the exact original payload
         resumeFirstAttempt = ex.first_attempt_at ?? null; // and its immutable attempt time
@@ -506,7 +525,7 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
           if (!(await adoptClaim("sending", ex.version, {}))) {
             return json({ error: "event in progress" }, 409);
           }
-          resumeReply = ex.detail;
+          resumeReply = ex.payload?.text ?? ex.detail; // canonical text from the persisted PAYLOAD
           resumeIdemKey = ex.idem_key ?? null;
           resumePayload = ex.payload ?? null;
           resumeFirstAttempt = ex.first_attempt_at ?? null;
