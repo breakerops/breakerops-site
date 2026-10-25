@@ -69,15 +69,24 @@ declare
 begin
   if p_action not in ('optout','optin') then raise exception 'bad action'; end if;
   -- provider timestamp: parse defensively; null means unknown (ambiguous).
-  -- A timestamp in the FUTURE beyond a small skew allowance is not trusted
-  -- either (clock skew / bogus value): treat as unknown. NOTE the horizon
-  -- comparison crosses clock domains (provider occurred_at vs our received
-  -- time) - no precision or skew guarantee is assumed; equality and
-  -- near-boundary cases always resolve to the SAFE side (held for START,
-  -- applied for STOP).
+  -- Distrust bounds at BOTH ends (never a skew claim: out-of-range values
+  -- only convert to ambiguous - STOP still applies, START is held):
+  --  * ANY value in the future of claim time (bogus or clock lead): must
+  --    never raise the anchor, or a real later STOP looks 'stale' and is
+  --    dropped (F-C poisoning). A legitimate sub-second provider clock lead
+  --    simply falls to the safe side.
+  --  * non-finite values (-infinity/+infinity) and implausibly-old values
+  --    (before 2020 - the business and provider account did not exist):
+  --    a bogus-LOW STOP must never be dropped as 'stale' against a real
+  --    anchor (F-D, the dangerous mirror), and a bogus-low START must
+  --    never anchor at -infinity.
   begin
     v_occurred := p_occurred_at::timestamptz;
-    if v_occurred is not null and v_occurred > now() + interval '5 minutes' then
+    if v_occurred is not null and (
+         v_occurred > now()
+         or v_occurred < timestamptz '2020-01-01'
+         or v_occurred = 'infinity'::timestamptz
+         or v_occurred = '-infinity'::timestamptz) then
       v_occurred := null;
     end if;
   exception when others then
