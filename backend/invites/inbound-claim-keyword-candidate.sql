@@ -68,9 +68,18 @@ declare
   v_claim_status text := 'processing';
 begin
   if p_action not in ('optout','optin') then raise exception 'bad action'; end if;
-  -- provider timestamp: parse defensively; null means unknown (ambiguous)
+  -- provider timestamp: parse defensively; null means unknown (ambiguous).
+  -- A timestamp in the FUTURE beyond a small skew allowance is not trusted
+  -- either (clock skew / bogus value): treat as unknown. NOTE the horizon
+  -- comparison crosses clock domains (provider occurred_at vs our received
+  -- time) - no precision or skew guarantee is assumed; equality and
+  -- near-boundary cases always resolve to the SAFE side (held for START,
+  -- applied for STOP).
   begin
     v_occurred := p_occurred_at::timestamptz;
+    if v_occurred is not null and v_occurred > now() + interval '5 minutes' then
+      v_occurred := null;
+    end if;
   exception when others then
     v_occurred := null;
   end;
@@ -82,13 +91,15 @@ begin
   elsif p_action = 'optin'
      and (v_occurred is null
           or (found and v_state.unknown_received_at is not null
-              and v_occurred < v_state.unknown_received_at)
+              and v_occurred <= v_state.unknown_received_at)
           or (found and v_state.last_occurred_at is not null and v_occurred = v_state.last_occurred_at)) then
     -- ambiguous resubscribe: unknown-ts incoming; OR a timestamped START
     -- that cannot be proven newer than an applied unknown-ts STOP (which is
     -- known only to have occurred at or before its RECEIVED time - the
     -- horizon); OR an exact anchor tie. Never auto-applied; desk reconciles.
-    -- A START with occurred_at >= the horizon IS provably newer and applies.
+    -- A START with occurred_at strictly greater than the horizon is
+    -- provably newer and applies; equality stays ambiguous (held) - no
+    -- timestamp precision or clock-skew guarantee is assumed.
     v_claim_status := 'held';
   end if;
 
