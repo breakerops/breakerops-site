@@ -44,6 +44,11 @@ alter table public.sms_keyword_state add column if not exists unknown_received_a
 -- desk evidence: the claim row itself must carry what it asserted
 alter table public.inbound_events add column if not exists action text;
 alter table public.inbound_events add column if not exists keyword text;
+-- event-chain generation: increments on every APPLIED keyword event; the
+-- claim records the generation it saw (under the same row lock), so the
+-- desk can tell "something applied after this claim" without timestamps
+alter table public.inbound_events add column if not exists state_gen bigint;
+alter table public.sms_keyword_state add column if not exists gen bigint not null default 0;
 alter table public.sms_keyword_state drop column if exists last_occurred_unknown; -- superseded v3.2 experiment
 alter table public.sms_keyword_state enable row level security;
 revoke all on public.sms_keyword_state from public, anon, authenticated;
@@ -131,8 +136,9 @@ begin
     v_claim_status := 'held';
   end if;
 
-  insert into public.inbound_events(event_id, event_type, from_phone, status, owner, version, occurred_at, action, keyword)
-    values (p_event_id, p_event_type, p_from_phone, v_claim_status, p_owner, 1, v_occurred, p_action, p_keyword)
+  insert into public.inbound_events(event_id, event_type, from_phone, status, owner, version, occurred_at, action, keyword, state_gen)
+    values (p_event_id, p_event_type, p_from_phone, v_claim_status, p_owner, 1, v_occurred, p_action, p_keyword,
+            coalesce(v_state.gen, 0))
     on conflict (event_id) do nothing
     returning true into v_inserted;
   if v_inserted is distinct from true then return 'duplicate'; end if;
@@ -148,12 +154,13 @@ begin
   else
     delete from public.sms_opt_outs where phone = p_from_phone;
   end if;
-  insert into public.sms_keyword_state(phone, last_occurred_at, unknown_received_at, last_action, last_event_id)
+  insert into public.sms_keyword_state(phone, last_occurred_at, unknown_received_at, last_action, last_event_id, gen)
     values (p_from_phone, v_occurred,
             case when v_occurred is null then now() else null end,
-            p_action, p_event_id)
+            p_action, p_event_id, 1)
     on conflict (phone) do update
       set last_occurred_at = coalesce(excluded.last_occurred_at, public.sms_keyword_state.last_occurred_at),
+          gen = public.sms_keyword_state.gen + 1,
           unknown_received_at = case
             when v_occurred is null and p_action = 'optout'
               then greatest(coalesce(public.sms_keyword_state.unknown_received_at, '-infinity'::timestamptz), now())
