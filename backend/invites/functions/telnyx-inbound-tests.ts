@@ -652,4 +652,22 @@ const STOP = "STOP";
     "stage B/C: dispatched send completes (irreversible), outcome CAS fails, row stays uncertain for desk - never a duplicate");
 }
 
+
+// 50: post-ack process death mid-flow leaves DISCOVERABLE recovery state
+{
+  let release!: () => void;
+  const latch = new Promise<void>((res) => { release = res; });
+  const { rawH, bgTasks, inbound, optouts, sends } = makeWorld({ sendGate: false, sendLatch: latch });
+  const r = await rawH(signedReq(evt(STOP, "evt-50")));
+  const j = await r.json();
+  await new Promise((r2) => setTimeout(r2, 10)); // flow reaches the latch-blocked send
+  bgTasks.length = 0; // simulate process death: scheduled work never completes
+  const c = inbound.rows[0];
+  ok(j.accepted === true && optouts.rows.length === 1 && sends.length === 0 &&
+     c.status === "sending" && !!c.owner && !!c.idem_key && !!c.first_attempt_at,
+    "death mid-flow: ack already sent, suppression durable, claim sits in sending with owner+idem key+attempt time - sweeper/desk recoverable (desk item, not auto-retry)");
+  release(); // let the dangling promise settle so the suite exits clean
+  await new Promise((r2) => setTimeout(r2, 10));
+}
+
 console.log(`all ${passed} checks passed`);
