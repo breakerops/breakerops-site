@@ -113,12 +113,17 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         let st = kwState.get(a.p_from_phone);
         let claimStatus = "processing";
         if (st && st.lastOccurredAt !== null && occ !== null && occ < st.lastOccurredAt) claimStatus = "stale_event";
-        else if (a.p_action === "optin" && (occ === null
-          || (st && st.unknownHorizon !== null && occ < st.unknownHorizon)
-          || (st && st.lastOccurredAt !== null && occ === st.lastOccurredAt))) claimStatus = "held";
+        // v3.4: future-beyond-skew timestamps are treated as unknown; horizon
+        // equality is ambiguous (held), only strictly-greater applies
+        const occEff = occ !== null && occ > Date.now() + 300_000 ? null : occ;
+        let claimStatus2 = claimStatus;
+        if (a.p_action === "optin" && claimStatus === "processing" && (occEff === null
+          || (st && st.unknownHorizon !== null && occEff <= st.unknownHorizon)
+          || (st && st.lastOccurredAt !== null && occEff === st.lastOccurredAt))) claimStatus2 = "held";
+        claimStatus = claimStatus2;
         if (inbound.rows.some((r) => r.event_id === a.p_event_id)) return { data: "duplicate", error: null };
         inbound.rows.push({ event_id: a.p_event_id, event_type: a.p_event_type, from_phone: a.p_from_phone,
-          status: claimStatus, owner: a.p_owner, version: 1, occurred_at: occ ? new Date(occ).toISOString() : null,
+          status: claimStatus, owner: a.p_owner, version: 1, occurred_at: occEff ? new Date(occEff).toISOString() : null,
           updated_at: new Date().toISOString() });
         if (claimStatus === "stale_event") return { data: "stale", error: null };
         if (claimStatus === "held") return { data: "held", error: null };
@@ -130,9 +135,9 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
           for (let i = optouts.rows.length - 1; i >= 0; i--) if (optouts.rows[i].phone === a.p_from_phone) optouts.rows.splice(i, 1);
         }
         kwState.set(a.p_from_phone, {
-          lastOccurredAt: occ ?? (st ? st.lastOccurredAt : null),
+          lastOccurredAt: occEff ?? (st ? st.lastOccurredAt : null),
           unknownHorizon: a.p_action === "optin" ? null
-            : occ === null ? Math.max(st?.unknownHorizon ?? -Infinity, Date.now())
+            : occEff === null ? Math.max(st?.unknownHorizon ?? -Infinity, Date.now())
             : (st ? st.unknownHorizon : null),
           lastAction: a.p_action });
         return { data: "claimed", error: null };
@@ -534,8 +539,8 @@ const STOP = "STOP";
   const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
   await h(signedReq(evt(STOP, "evt-41a"))); // unknown ts -> applies, horizon = its received time (now)
   sends.length = 0;
-  const future = new Date(Date.now() + 3600_000).toISOString();
-  const r = await h(signedReq(evt("START", "evt-41b", "+15551234567", future)));
+  const nearFuture = new Date(Date.now() + 120_000).toISOString(); // within the 5-min skew trust window
+  const r = await h(signedReq(evt("START", "evt-41b", "+15551234567", nearFuture)));
   const j = await r.json();
   ok(j.status === "opted_in" && optouts.rows.length === 0 && sends.length === 1,
     "START provably newer than the unknown-STOP horizon applies (no over-blocking)");
@@ -543,6 +548,34 @@ const STOP = "STOP";
   const r2 = await h(signedReq(evt("START", "evt-41c", "+15551234567", "2026-10-25T04:00:00Z")));
   const claim2 = inbound.rows.find((r) => r.event_id === "evt-41c");
   ok(claim2.status === "stale_event" || claim2.status === "held", "older START after re-anchor is still blocked");
+}
+
+
+// 42: future-beyond-skew timestamps are not trusted: future START held, future STOP applies on safe side
+{
+  const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
+  const future = new Date(Date.now() + 3600_000).toISOString();
+  const r1 = await h(signedReq(evt("START", "evt-42a", "+15551234567", future)));
+  ok(inbound.rows.find((r) => r.event_id === "evt-42a").status === "held" && optouts.rows.length === 0,
+    "future-ts START treated as ambiguous: held, not applied");
+  const r2 = await h(signedReq(evt(STOP, "evt-42b", "+15551234567", future)));
+  const j2 = await r2.json();
+  ok(j2.status === "opted_out" && optouts.rows.length === 1, "future-ts STOP applies on the safe side");
+}
+// 43: horizon equality is ambiguous - a START exactly AT the horizon is held
+{
+  const { h, inbound, optouts } = makeWorld({ sendGate: false });
+  await h(signedReq(evt(STOP, "evt-43a"))); // unknown ts; horizon = received now
+  const r = await h(signedReq(evt("START", "evt-43b", "+15551234567", new Date().toISOString()))); // ~= horizon
+  const claim = inbound.rows.find((r) => r.event_id === "evt-43b");
+  ok(claim.status === "held" && optouts.rows.length === 1, "START at the horizon boundary: held (equality ambiguous)");
+}
+// 44: malformed occurred_at -> START held, no crash
+{
+  const { h, inbound } = makeWorld({ sendGate: false });
+  const r = await h(signedReq(evt("START", "evt-44", "+15551234567", "not-a-timestamp")));
+  ok(r.status === 200 && inbound.rows.find((r) => r.event_id === "evt-44").status === "held",
+    "malformed occurred_at: START held, event claimed, 200 ack");
 }
 
 console.log(`all ${passed} checks passed`);
