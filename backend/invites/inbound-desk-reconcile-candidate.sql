@@ -29,7 +29,7 @@ create or replace function public.inbound_desk_resolve(
   p_event_id text,
   p_resolution text,           -- 'apply_optin' | 'keep_suppressed'
   p_note text
-) returns text                 -- 'resolved' | 'not_resolvable' | 'bad_resolution' | 'newer_keyword_exists'
+) returns text                 -- 'resolved' | 'not_resolvable' | 'bad_resolution' | 'newer_keyword_exists' | 'unknown_generation'
 language plpgsql security definer set search_path='public' as $$
 declare
   v_claim public.inbound_events%rowtype;
@@ -49,9 +49,14 @@ begin
        or v_claim.from_phone is null then
       return 'not_resolvable';
     end if;
-    -- generation guard: refuse if anything applied after this claim
-    if v_claim.state_gen is null then return 'newer_keyword_exists'; end if;
-    select * into v_state from public.sms_keyword_state where phone = v_claim.from_phone;
+    -- generation guard: refuse if anything applied after this claim.
+    -- D5: the gen read MUST be under the state row lock - an unlocked read
+    -- can see a stale committed gen while a concurrent newer event's apply
+    -- is still uncommitted, then delete suppression that event re-adds.
+    -- Lock order is claim row -> state row -> opt_outs, matching the claim
+    -- RPC's state -> opt_outs order, so no AB-BA deadlock with the RPC.
+    if v_claim.state_gen is null then return 'unknown_generation'; end if;
+    select * into v_state from public.sms_keyword_state where phone = v_claim.from_phone for update;
     if found and v_state.gen is distinct from v_claim.state_gen then
       return 'newer_keyword_exists';
     end if;
