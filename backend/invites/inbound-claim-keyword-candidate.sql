@@ -34,15 +34,22 @@
 -- decision; this candidate only prevents the silent unsafe inversion.
 create table if not exists public.sms_keyword_state (
   phone text primary key,
-  last_occurred_at timestamptz,        -- newest APPLIED keyword event time; null = unknown
+  last_occurred_at timestamptz,        -- newest KNOWN anchor; null = none known
+  unknown_received_at timestamptz,     -- uncertainty horizon: received time of the newest APPLIED unknown-ts event
   last_action text not null,           -- 'optout' | 'optin'
   last_event_id text not null,
   updated_at timestamptz not null default now()
 );
+alter table public.sms_keyword_state add column if not exists unknown_received_at timestamptz;
+alter table public.sms_keyword_state drop column if exists last_occurred_unknown; -- superseded v3.2 experiment
 alter table public.sms_keyword_state enable row level security;
 revoke all on public.sms_keyword_state from public, anon, authenticated;
 grant select, insert, update on public.sms_keyword_state to service_role;
 alter table public.inbound_events add column if not exists occurred_at timestamptz;
+
+-- H3: create-or-replace does NOT remove other overloads; the pre-chronology
+-- 6-arg version would stay callable alongside this one. Drop it explicitly.
+drop function if exists public.inbound_claim_keyword(text,text,text,text,text,text);
 
 create or replace function public.inbound_claim_keyword(
   p_event_id text,
@@ -74,7 +81,14 @@ begin
     v_claim_status := 'stale_event';
   elsif p_action = 'optin'
      and (v_occurred is null
+          or (found and v_state.unknown_received_at is not null
+              and v_occurred < v_state.unknown_received_at)
           or (found and v_state.last_occurred_at is not null and v_occurred = v_state.last_occurred_at)) then
+    -- ambiguous resubscribe: unknown-ts incoming; OR a timestamped START
+    -- that cannot be proven newer than an applied unknown-ts STOP (which is
+    -- known only to have occurred at or before its RECEIVED time - the
+    -- horizon); OR an exact anchor tie. Never auto-applied; desk reconciles.
+    -- A START with occurred_at >= the horizon IS provably newer and applies.
     v_claim_status := 'held';
   end if;
 
@@ -95,15 +109,25 @@ begin
   else
     delete from public.sms_opt_outs where phone = p_from_phone;
   end if;
-  insert into public.sms_keyword_state(phone, last_occurred_at, last_action, last_event_id)
-    values (p_from_phone, v_occurred, p_action, p_event_id)
+  insert into public.sms_keyword_state(phone, last_occurred_at, unknown_received_at, last_action, last_event_id)
+    values (p_from_phone, v_occurred,
+            case when v_occurred is null then now() else null end,
+            p_action, p_event_id)
     on conflict (phone) do update
       set last_occurred_at = coalesce(excluded.last_occurred_at, public.sms_keyword_state.last_occurred_at),
+          unknown_received_at = case
+            when p_action = 'optin' then null           -- an applied START was proven newer: horizon closed
+            when v_occurred is null then greatest(coalesce(public.sms_keyword_state.unknown_received_at, '-infinity'::timestamptz), now())
+            else public.sms_keyword_state.unknown_received_at
+          end,
           last_action = excluded.last_action,
           last_event_id = excluded.last_event_id,
           updated_at = now();
-  -- coalesce: an applied event with an UNKNOWN occurred_at must not erase
-  -- the newest known anchor, or a later genuinely-stale event could apply.
+  -- anchor/horizon rules: an applied unknown-ts event (only STOPs can be
+  -- applied with unknown ts - ambiguous STARTs are held) sets or refreshes
+  -- the uncertainty horizon to its received time without erasing the newest
+  -- known anchor; an applied START clears the horizon because it was proven
+  -- newer than everything ambiguous before it.
   return 'claimed';
 end $$;
 revoke all on function public.inbound_claim_keyword(text,text,text,text,text,text,text) from public, anon, authenticated;
