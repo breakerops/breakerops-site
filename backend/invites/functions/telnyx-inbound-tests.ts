@@ -153,9 +153,11 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         // candidate v2 parity: eligibility = db_done + idem_key + payload + first_attempt_at within 23h;
         // adoption keeps db_done, flips owner, bumps version (SKIP LOCKED is a no-op in the single-threaded stub)
         const win = 23 * 60 * 60 * 1000;
+        const dwell = 2 * 60 * 1000; // v3 parity: min dwell bounds send attempts per claim
         const eligible = inbound.rows
           .filter((r) => r.status === "db_done" && r.idem_key && r.payload && r.first_attempt_at
-            && Number.isFinite(Date.parse(r.first_attempt_at)) && Date.now() - Date.parse(r.first_attempt_at) < win)
+            && Number.isFinite(Date.parse(r.first_attempt_at)) && Date.now() - Date.parse(r.first_attempt_at) < win
+            && Date.now() - Date.parse(r.updated_at) >= dwell)
           .sort((a, b) => Date.parse(a.first_attempt_at) - Date.parse(b.first_attempt_at));
         const row = eligible[0];
         if (!row) return { data: [], error: null };
@@ -708,7 +710,7 @@ async function seedParked(w: any, overrides: Record<string, any> = {}) {
     status: "db_done", owner: "w-dead", version: 3, occurred_at: null, action: "optout", keyword: "STOP",
     state_gen: 1, idem_key: "idem-original", payload: { from: "+15550001111", to: "+15557654321", text: "parked confirmation" },
     first_attempt_at: new Date(Date.now() - 60_000).toISOString(),
-    detail: "parked confirmation", updated_at: new Date(Date.now() - 60_000).toISOString(), ...overrides });
+    detail: "parked confirmation", updated_at: new Date(Date.now() - 180_000).toISOString(), ...overrides });
 }
 {
   // 60: happy path - worker adopts parked row, sends with ORIGINAL key+payload, row done
@@ -767,4 +769,55 @@ async function seedParked(w: any, overrides: Record<string, any> = {}) {
   const row = w.inbound.rows.find((r: any) => r.event_id === "parked-1");
   ok(res.adopted && res.outcome === "retryable" && row.status === "db_done" && row.idem_key === "idem-original",
     "worker: 429 returns claim to db_done with original key - resumable, not uncertain");
+}
+
+// 66: bounded backoff - a row fresh from a 429 rollback is NOT immediately re-adoptable
+{
+  const w = makeWorld({ sendResults: [{ outcome: "retryable", error: "429" }] });
+  await seedParked(w);
+  w.optouts.rows.push({ phone: "+15557654321", opted_out_at: new Date().toISOString(), keyword: "STOP" });
+  const worker = createTelnyxResumeWorker({ store: w.store, env: w.sendEnv, sendSms: w.sendSms });
+  const r1 = await worker("worker-b1");
+  const row = w.inbound.rows.find((x: any) => x.event_id === "parked-1");
+  const r2 = await worker("worker-b2"); // immediate next pass
+  ok(r1.adopted && r1.outcome === "retryable" && row.status === "db_done" && !r2.adopted && w.sends.length === 1,
+    "backoff: 429 rollback is not re-adopted on the next pass - dwell bounds attempts, no provider hammering");
+}
+
+// 67: dual-dispatch race - worker-adopted row vs webhook redelivery: exactly ONE send
+{
+  const w = makeWorld({ sendResults: [{ outcome: "sent", providerId: "msg_race" }, { outcome: "sent", providerId: "msg_race2" }] });
+  await seedParked(w);
+  w.optouts.rows.push({ phone: "+15557654321", opted_out_at: new Date().toISOString(), keyword: "STOP" });
+  const worker = createTelnyxResumeWorker({ store: w.store, env: w.sendEnv, sendSms: w.sendSms });
+  // worker adopts (row stays db_done, owner=worker-c1) but has not sent yet: run adoption only via a first pass
+  // then a redelivery arrives for the same event BEFORE the worker's send-turn:
+  const rW = await worker("worker-c1"); // this completes fully (stub is sequential) - worker wins and sends
+  // redelivery after completion: same event id
+  const evt67 = evt(STOP, "parked-1", "+15557654321");
+  const rH = await w.h(signedReq(evt67));
+  const row = w.inbound.rows.find((x: any) => x.event_id === "parked-1");
+  ok(rW.adopted && rW.outcome === "sent" && rH.status === 200 && row.status === "done" && w.sends.length === 1,
+    "dual-dispatch: completed worker + late redelivery = exactly one send (redelivery dedupes on done)");
+}
+{
+  // 68: redelivery steals an adopted-but-unsent row; the worker's send-turn then CAS-fails - still exactly one send
+  const w = makeWorld({ sendGate: false, sendResults: [{ outcome: "sent", providerId: "msg_steal" }] });
+  await seedParked(w);
+  w.optouts.rows.push({ phone: "+15557654321", opted_out_at: new Date().toISOString(), keyword: "STOP" });
+  // simulate: worker adopted (owner=worker-c2, db_done) via the stub rpc directly
+  await w.store.rpc("inbound_claim_resume", { p_worker: "worker-c2" });
+  const adopted = w.inbound.rows.find((x: any) => x.event_id === "parked-1");
+  ok(adopted.owner === "worker-c2" && adopted.status === "db_done", "setup: worker adopted, row still db_done");
+  // redelivery arrives and steals via adoptClaim (version CAS) before the worker's send-turn
+  const rH = await w.h(signedReq(evt(STOP, "parked-1", "+15557654321")));
+  // now the worker's send-turn must fail (owner no longer matches)
+  const turn = await import("./telnyx-inbound.ts").then((m) => m.runSendTurn({
+    store: w.store, doSend: w.sendSms, gated: false, eventId: "parked-1", attemptId: "worker-c2",
+    action: "optout", phone: "+15557654321", intended: adopted.detail, idemKey: adopted.idem_key,
+    payload: adopted.payload, now: () => Date.now(),
+  }));
+  const row = w.inbound.rows.find((x: any) => x.event_id === "parked-1");
+  ok(rH.status === 200 && turn.outcome === "conflict" && row.status === "done" && w.sends.length === 1,
+    "dual-dispatch: redelivery steal + worker send-turn CAS-fail = exactly one send, no dual dispatch");
 }
