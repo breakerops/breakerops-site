@@ -79,6 +79,7 @@ export interface TelnyxDeps {
   now?: () => number;
   randomUUID?: () => string;
   sendSms?: (payload: Record<string, string>, idemKey: string) => Promise<SendOutcome>;
+  bg?: (p: Promise<unknown>) => void; // ack-fast scheduler (EdgeRuntime.waitUntil); tests inject a collector
 }
 
 // Telnyx signs `${timestamp}|${rawBody}` with ed25519; verify with the account's
@@ -172,6 +173,18 @@ async function sendSms(store: TelnyxStore, payload: Record<string, string>, idem
 
 export function createTelnyxInboundHandler(deps: TelnyxDeps) {
   const { store, env } = deps;
+  // Ack-fast scheduler: after the DURABLE claim, remaining work (keyword
+  // confirmations, routing, sends) runs in the background and the provider
+  // gets its 2xx immediately - the messaging product contract is a 2-second
+  // ack (developers.telnyx.com/docs/messaging/messages/receiving-webhooks).
+  // Provider retries stop mattering once the claim is durable: post-claim
+  // failures live on the claim row and are recovered by the sweeper/desk,
+  // not by asking the provider to redeliver. Without a scheduler primitive
+  // the work runs inline (correctness preserved, latency not).
+  const bg: ((p: Promise<unknown>) => void) | undefined =
+    deps.bg ?? (((globalThis as any).EdgeRuntime?.waitUntil)
+      ? (p) => (globalThis as any).EdgeRuntime.waitUntil(p)
+      : undefined);
   const now = deps.now ?? (() => Date.now());
   const randomUUID = deps.randomUUID ?? (() => crypto.randomUUID());
   const doSend = deps.sendSms ?? ((p: Record<string, string>, k: string) => sendSms(store, p, k));
@@ -467,9 +480,24 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
       return json({ error: "provider outcome unknown; held for reconciliation, no automatic resend" }, 500);
     };
 
+    // Ack-fast boundary: everything below is post-claim work. The claim (and
+    // for keyword events the suppression mutation, atomically) is already
+    // durable, so the provider is acked NOW and the flow finishes in the
+    // background. The flow's own error responses no longer reach the
+    // provider - they were only ever useful for pre-claim failures; post-claim
+    // recovery is internal (claim row state + sweeper + desk).
+    const ackFast = async (work: () => Promise<Response>): Promise<Response> => {
+      const p = work()
+        .then((r) => { try { console.log("inbound flow finished", eventId, r.status); } catch {} return r; })
+        .catch((e) => { try { console.error("inbound flow threw", eventId, String(e)); } catch {} });
+      if (bg) bg(p); else await p;
+      return json({ ok: true, accepted: true });
+    };
+
     // STOP/START/HELP per the published sms-terms. These short-circuit all
     // other routing; the confirmation text is the "one final text" the terms
     // promise. Opt-out rows are honored by reminders-send before every send.
+    return ackFast(async (): Promise<Response> => {
     if (isOptOut) {
       return await completeWithConfirmation(
         "opted_out",
@@ -522,6 +550,7 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
     //  none     -> existing public lead path (desk notification)
     await setClaim("done", "stub-no-durable-capture");
     return json({ ok: true, status, routing: "stub-no-durable-capture", captured: false, send: gated ? "disabled" : "enabled" });
+    });
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
