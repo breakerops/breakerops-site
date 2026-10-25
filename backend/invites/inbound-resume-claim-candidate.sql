@@ -16,11 +16,17 @@
 --   horizon minus margin)        - outside it, resume is unsafe and the row
 --                                  belongs to the sweeper's uncertain triage
 --
--- Concurrency: FOR UPDATE SKIP LOCKED + a status CAS on the transition, so
+-- Concurrency: FOR UPDATE SKIP LOCKED takes the row lock at select time; the
+--   status re-check on the update is belt-and-braces over that lock, so
 --   * two workers never adopt the same row (SKIP LOCKED),
---   * a sweeper flipping the row to 'uncertain' between select and update
---     loses to the CAS predicate and the worker backs off (Stage A),
---   * a worker crash after adoption leaves the row in 'processing' with the
+--   * a sweeper that flipped the row to 'uncertain' before the select is
+--     never adopted (eligibility), and one racing the select loses to the
+--     status re-check (Stage A),
+--   * adoption KEEPS the row at db_done (owner flipped, version bumped): the
+--     worker's send-turn CAS (db_done -> sending) is the same transition the
+--     webhook redelivery path uses, so worker and redelivery share one
+--     discipline and race each other safely (version/status CAS; one wins),
+--   * a worker crash after adoption leaves the row at db_done with the
 --     worker's owner - the existing sweeper recovers it, unchanged semantics.
 --
 -- Returns the adopted row (idem_key + payload are the resume inputs), or no
@@ -47,6 +53,7 @@ begin
     from public.inbound_events e
    where e.status = 'db_done'
      and e.idem_key is not null
+     and e.payload is not null        -- canonical payload required with the key
      and e.first_attempt_at is not null
      and e.first_attempt_at > now() - p_window
    order by e.first_attempt_at asc
@@ -57,8 +64,7 @@ begin
 
   return query
     update public.inbound_events t
-       set status = 'processing',
-           owner = p_worker,
+       set owner = p_worker,
            version = t.version + 1,
            detail = t.detail || ' [resume-adopted by ' || p_worker || ' for same-key in-window resume]',
            updated_at = now()
