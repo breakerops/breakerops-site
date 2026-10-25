@@ -100,7 +100,7 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
   const sendQueue = [...(opts.sendResults ?? [])];
   const rpcCalls: { fn: string; args: any }[] = [];
   const rpcFaults = { claim_keyword: 0 };
-  const kwState = new Map<string, { lastOccurredAt: number | null; unknownHorizon: number | null; lastAction: string }>();
+  const kwState = new Map<string, { lastOccurredAt: number | null; unknownHorizon: number | null; lastAction: string; gen: number }>(); // v3.8 parity: gen increments per applied event; claims record state_gen
   const store = {
     from: (t: string) => (t === "inbound_events" ? inbound : optouts),
     rpc: async (fn: string, a: any) => {
@@ -130,7 +130,7 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         if (inbound.rows.some((r) => r.event_id === a.p_event_id)) return { data: "duplicate", error: null };
         inbound.rows.push({ event_id: a.p_event_id, event_type: a.p_event_type, from_phone: a.p_from_phone,
           status: claimStatus, owner: a.p_owner, version: 1, occurred_at: occEff ? new Date(occEff).toISOString() : null,
-          action: a.p_action, keyword: a.p_keyword,
+          action: a.p_action, keyword: a.p_keyword, state_gen: st ? st.gen : 0,
           updated_at: new Date().toISOString() });
         if (claimStatus === "stale_event") return { data: "stale", error: null };
         if (claimStatus === "held") return { data: "held", error: null };
@@ -146,7 +146,7 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
           unknownHorizon: a.p_action === "optout" && occEff === null
             ? Math.max(st?.unknownHorizon ?? -Infinity, Date.now())
             : (st ? st.unknownHorizon : null),  // horizon never auto-clears; desk reconciles
-          lastAction: a.p_action });
+          lastAction: a.p_action, gen: (st ? st.gen : 0) + 1 });
         return { data: "claimed", error: null };
       }
       if (fn === "get_connection") return { data: [{ api_key: "KEY-test", meta: { from_number: "+15550001111" } }], error: null };
