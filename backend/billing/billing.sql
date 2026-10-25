@@ -24,6 +24,7 @@ alter table public.billing_profiles enable row level security;
 -- Members may READ their own business's billing label; only service role writes.
 create policy billing_profiles_member_read on billing_profiles for select to authenticated
   using (is_member(business_id));
+grant select on public.billing_profiles to authenticated;  -- policy is dead without this grant (found by billing-tests)
 revoke insert, update, delete on public.billing_profiles from anon, authenticated;
 
 -- Append-only payment event log. Webhook stub writes here with the raw
