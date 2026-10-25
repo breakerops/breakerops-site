@@ -153,11 +153,11 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         // candidate v2 parity: eligibility = db_done + idem_key + payload + first_attempt_at within 23h;
         // adoption keeps db_done, flips owner, bumps version (SKIP LOCKED is a no-op in the single-threaded stub)
         const win = 23 * 60 * 60 * 1000;
-        const dwell = 2 * 60 * 1000; // v3 parity: min dwell bounds send attempts per claim
+        // v4 parity: explicit next_attempt_at paces SEND retries per claim (null = never rate-limited)
         const eligible = inbound.rows
           .filter((r) => r.status === "db_done" && r.idem_key && r.payload && r.first_attempt_at
             && Number.isFinite(Date.parse(r.first_attempt_at)) && Date.now() - Date.parse(r.first_attempt_at) < win
-            && Date.now() - Date.parse(r.updated_at) >= dwell)
+            && (!r.next_attempt_at || Date.parse(r.next_attempt_at) <= Date.now()))
           .sort((a, b) => Date.parse(a.first_attempt_at) - Date.parse(b.first_attempt_at));
         const row = eligible[0];
         if (!row) return { data: [], error: null };
@@ -186,7 +186,7 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
     await Promise.all(bgTasks.splice(0)); // ack-fast: response first, background flow completes after
     return r;
   };
-  return { h, rawH, bgTasks, inbound, optouts, sends, rpcCalls, rpcFaults, kwState, store, sendSms, sendEnv: { get: (k: string) => k === "TELNYX_SEND_ENABLED" ? "true" : undefined } as any };
+  return { h, rawH, bgTasks, inbound, optouts, sends, rpcCalls, rpcFaults, kwState, store, sendSms, sendQueue, sendEnv: { get: (k: string) => k === "TELNYX_SEND_ENABLED" ? "true" : undefined } as any };
 }
 const STOP = "STOP";
 
@@ -688,7 +688,6 @@ const STOP = "STOP";
   await new Promise((r2) => setTimeout(r2, 10));
 }
 
-console.log(`all ${passed} checks passed`);
 
 // 59: AF-2 - swept mid-intent: setIntent status guard keeps the sweep authoritative
 {
@@ -780,8 +779,16 @@ async function seedParked(w: any, overrides: Record<string, any> = {}) {
   const r1 = await worker("worker-b1");
   const row = w.inbound.rows.find((x: any) => x.event_id === "parked-1");
   const r2 = await worker("worker-b2"); // immediate next pass
-  ok(r1.adopted && r1.outcome === "retryable" && row.status === "db_done" && !r2.adopted && w.sends.length === 1,
-    "backoff: 429 rollback is not re-adopted on the next pass - dwell bounds attempts, no provider hammering");
+  const stamped = row.next_attempt_at && Date.parse(row.next_attempt_at) > Date.now();
+  ok(r1.adopted && r1.outcome === "retryable" && row.status === "db_done" && stamped && !r2.adopted && w.sends.length === 1,
+    "backoff: 429 rollback stamps explicit next_attempt_at; immediate pass does NOT re-adopt - no provider hammering");
+  // after the backoff elapses the SAME key resumes (window never reset)
+  w.sendQueue.push({ outcome: "sent", providerId: "msg_after_backoff" });
+  row.next_attempt_at = new Date(Date.now() - 1000).toISOString();
+  const r3 = await worker("worker-b3");
+  ok(r3.adopted && r3.outcome === "sent" && w.sends.length === 2 && w.sends[1].idemKey === "idem-original"
+    && row.first_attempt_at === row.first_attempt_at,
+    "backoff: after next_attempt_at elapses the ORIGINAL key resumes - replay window never reset");
 }
 
 // 67: dual-dispatch race - worker-adopted row vs webhook redelivery: exactly ONE send
@@ -821,3 +828,30 @@ async function seedParked(w: any, overrides: Record<string, any> = {}) {
   ok(rH.status === 200 && turn.outcome === "conflict" && row.status === "done" && w.sends.length === 1,
     "dual-dispatch: redelivery steal + worker send-turn CAS-fail = exactly one send, no dual dispatch");
 }
+
+// 70: canonical payload purity - audit annotations on detail never leak into the SENT text (worker path)
+{
+  const w = makeWorld({ sendGate: false, sendResults: [{ outcome: "sent", providerId: "msg_pure" }] });
+  await seedParked(w);
+  w.optouts.rows.push({ phone: "+15557654321", opted_out_at: new Date().toISOString(), keyword: "STOP" });
+  const worker = createTelnyxResumeWorker({ store: w.store, env: w.sendEnv, sendSms: w.sendSms });
+  const res = await worker("worker-p1"); // adoption annotates detail; send must use payload.text only
+  const row = w.inbound.rows.find((x: any) => x.event_id === "parked-1");
+  // detail is outcome-owned (the done write replaces it) - the purity guarantee
+  // being pinned is that NOTHING from audit/detail ever reaches the SENT payload.
+  ok(res.outcome === "sent" && w.sends[0].payload.text === "parked confirmation"
+    && !w.sends[0].payload.text.includes("[resume-adopted"),
+    "payload purity: adoption annotations never reach the SENT text - worker sends the canonical payload.text");
+}
+// 71: redelivery resume path - same purity (webhook resume uses payload.text, not annotated detail)
+{
+  const w = makeWorld({ sendGate: false, sendResults: [{ outcome: "sent", providerId: "msg_pure2" }] });
+  await seedParked(w, { detail: "parked confirmation [resume-adopted by some-worker for same-key in-window resume]" });
+  w.optouts.rows.push({ phone: "+15557654321", opted_out_at: new Date().toISOString(), keyword: "STOP" });
+  const rH = await w.h(signedReq(evt(STOP, "parked-1", "+15557654321")));
+  const row = w.inbound.rows.find((x: any) => x.event_id === "parked-1");
+  ok(rH.status === 200 && row.status === "done" && w.sends.length === 1 && w.sends[0].payload.text === "parked confirmation",
+    "payload purity (redelivery): resume sends the canonical payload.text even with annotated detail");
+}
+
+console.log(`all ${passed} checks passed`);
