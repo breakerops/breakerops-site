@@ -75,6 +75,7 @@ declare uid1 uuid='c1111111-1111-4111-8111-111111111111';
 begin
  -- member reads own business profile only
  perform set_config('request.jwt.claim.sub',uid1::text,true);
+ perform set_config('request.jwt.claims', json_build_object('sub',uid1,'role','authenticated')::text, true);
  select count(*) into n from public.billing_profiles;
  if n<>1 then raise exception 'TEST member read own'; end if;
 
@@ -84,6 +85,7 @@ begin
 
  -- non-member reads nothing
  perform set_config('request.jwt.claim.sub',uid2::text,true);
+ perform set_config('request.jwt.claims', json_build_object('sub',uid2,'role','authenticated')::text, true);
  select count(*) into n from public.billing_profiles;
  if n<>0 then raise exception 'TEST nonmember read'; end if;
 
@@ -91,6 +93,19 @@ begin
  -- oracle on another business's UUID (membership guard in billing.sql)
  if public.billing_entitlement(b1) is not null then raise exception 'TEST entitlement nonmember oracle'; end if;
  if public.billing_entitlement(b2) is not null then raise exception 'TEST entitlement nonmember oracle purged'; end if;
+
+ -- fail closed on malformed authenticated claims: missing or empty sub
+ -- must not be treated as a trusted service caller
+ perform set_config('request.jwt.claim.sub','',true);
+ perform set_config('request.jwt.claims', '{"role":"authenticated"}', true);
+ if public.billing_entitlement(b1) is not null then raise exception 'TEST entitlement missing sub fails closed'; end if;
+ perform set_config('request.jwt.claims', '{"sub":"","role":"authenticated"}', true);
+ if public.billing_entitlement(b1) is not null then raise exception 'TEST entitlement empty sub fails closed'; end if;
+
+ -- trusted server path: service_role claim (no sub) keeps full access
+ perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
+ if public.billing_entitlement(b1)<>'pilot_manual' then raise exception 'TEST entitlement service_role path'; end if;
+ if public.billing_entitlement(b2)<>'none' then raise exception 'TEST entitlement service_role purged'; end if;
 
  -- authenticated can never write billing_profiles (service role only)
  begin
