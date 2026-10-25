@@ -47,11 +47,18 @@ revoke all on public.billing_events from anon, authenticated;  -- service role o
 -- (1500/mo) is deliberately NOT implemented here; that decision is open.
 create or replace function public.billing_entitlement(p_business uuid)
 returns text language sql security definer set search_path='public' stable as $$
+  -- membership guard: authenticated callers may only probe their own business;
+  -- otherwise an unauthenticated-shape NULL is returned, so the function cannot
+  -- be used as an existence/lifecycle oracle on arbitrary business UUIDs.
+  -- service_role calls carry no JWT sub (auth.uid() is null) and keep full
+  -- access for the webhook path.
   select case
     when b.lifecycle = 'purged' then 'none'
     else 'pilot_manual'
   end
-  from public.businesses b where b.id = p_business;
+  from public.businesses b
+  where b.id = p_business
+    and (auth.uid() is null or is_member(b.id, auth.uid()));
 $$;
 revoke all on function public.billing_entitlement(uuid) from public, anon;
 grant execute on function public.billing_entitlement(uuid) to authenticated, service_role;
