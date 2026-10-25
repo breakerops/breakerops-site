@@ -60,24 +60,38 @@
 // Retry classification (Telnyx command-retries doc): 429 = retryable (not
 // accepted); 400/401/403/404/422 = permanent, never retry unchanged;
 // 408/409/5xx/timeout/network = uncertain.
-import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
-
-const supabase = createClient(
-  Deno.env.get("SUPABASE_URL")!,
-  Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!
-);
+// createTelnyxInboundHandler takes injected deps so the ACTUAL handler is
+// execution/fault-testable off the edge runtime (telnyx-inbound-tests.ts):
+// store (supabase subset), env, now, randomUUID and sendSms are all
+// injectable. The Deno edge wiring at the bottom is the only untestable
+// part and stays minimal.
+export interface TelnyxEnv {
+  get(key: string): string | undefined;
+}
+// minimal structural subset of supabase-js used here
+export interface TelnyxStore {
+  from(table: string): any;
+  rpc(fn: string, args: Record<string, unknown>): Promise<{ data: any; error: any }>;
+}
+export interface TelnyxDeps {
+  store: TelnyxStore;
+  env: TelnyxEnv;
+  now?: () => number;
+  randomUUID?: () => string;
+  sendSms?: (payload: Record<string, string>, idemKey: string) => Promise<SendOutcome>;
+}
 
 // Telnyx signs `${timestamp}|${rawBody}` with ed25519; verify with the account's
 // public key (owner pastes it into this secret when the account goes live).
 // Untested against a live account until then - treat first live test as verification.
-async function verifyTelnyx(req: Request, rawBody: string): Promise<boolean> {
-  const b64 = Deno.env.get("TELNYX_WEBHOOK_PUBLIC_KEY");
+export async function verifyTelnyx(env: TelnyxEnv, req: Request, rawBody: string, nowMs: number): Promise<boolean> {
+  const b64 = env.get("TELNYX_WEBHOOK_PUBLIC_KEY");
   if (!b64) return false;
   const sig = req.headers.get("telnyx-signature-ed25519");
   const ts = req.headers.get("telnyx-timestamp");
   if (!sig || !ts) return false;
   // replay window: reject events older than 5 minutes
-  const age = Math.abs(Date.now() / 1000 - Number(ts));
+  const age = Math.abs(nowMs / 1000 - Number(ts));
   if (!Number.isFinite(age) || age > 300) return false;
   try {
     const key = await crypto.subtle.importKey(
@@ -112,22 +126,22 @@ function normalizePhone(raw: string): string | null {
 // definitive rejection safe to retry: it proves the provider refused the
 // request. A 5xx, timeout or proxy error may still have queued the message,
 // so those are uncertain, exactly like a lost connection.
-type SendOutcome =
+export type SendOutcome =
   | { outcome: "sent"; providerId?: string }
   | { outcome: "retryable"; error: string }   // 429: provably not accepted
   | { outcome: "failed"; error: string }     // other 4xx: permanent rejection
   | { outcome: "uncertain"; error: string }; // 5xx/408/timeout/network: unknown
 
-async function getApiKey(): Promise<string | null> {
-  const { data: rows, error } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
+async function getApiKey(store: TelnyxStore): Promise<string | null> {
+  const { data: rows, error } = await store.rpc("get_connection", { p_provider: "telnyx" });
   const conn = rows?.[0];
   return error || !conn?.api_key ? null : conn.api_key;
 }
 
 // Sends the EXACT persisted payload - never rebuilt - so the idempotency
 // key always travels with byte-identical content.
-async function sendSms(payload: Record<string, string>, idemKey: string): Promise<SendOutcome> {
-  const apiKey = await getApiKey();
+async function sendSms(store: TelnyxStore, payload: Record<string, string>, idemKey: string): Promise<SendOutcome> {
+  const apiKey = await getApiKey(store);
   if (!apiKey) return { outcome: "failed", error: "sms provider not configured" };
   try {
     const res = await fetch("https://api.telnyx.com/v2/messages", {
@@ -156,9 +170,14 @@ async function sendSms(payload: Record<string, string>, idemKey: string): Promis
   }
 }
 
-Deno.serve(async (req) => {
+export function createTelnyxInboundHandler(deps: TelnyxDeps) {
+  const { store, env } = deps;
+  const now = deps.now ?? (() => Date.now());
+  const randomUUID = deps.randomUUID ?? (() => crypto.randomUUID());
+  const doSend = deps.sendSms ?? ((p: Record<string, string>, k: string) => sendSms(store, p, k));
+  return async function handle(req: Request): Promise<Response> {
   const rawBody = await req.text();
-  if (!(await verifyTelnyx(req, rawBody))) {
+  if (!(await verifyTelnyx(env, req, rawBody, now()))) {
     // fail closed: no admission, no routing, no desk note leak about contents
     return json({ error: "unverified" }, 401);
   }
@@ -186,10 +205,10 @@ Deno.serve(async (req) => {
     // adoption, only against the exact version the worker read). Two stale
     // readers can therefore never both reclaim; a worker that lost a race
     // affects 0 rows and backs off instead of clobbering a later state.
-    const attemptId = crypto.randomUUID();
+    const attemptId = randomUUID();
     const bump = { updated_at: new Date().toISOString() };
     const setClaim = async (status: string, detail: string): Promise<boolean> => {
-      const { data, error } = await supabase.from("inbound_events")
+      const { data, error } = await store.from("inbound_events")
         .update({ status, detail, ...bump })
         .eq("event_id", eventId).eq("owner", attemptId)
         .select("event_id");
@@ -198,21 +217,21 @@ Deno.serve(async (req) => {
     const takeClaim = async (fromStatus: string, toStatus: string, detail?: string): Promise<boolean> => {
       const payload: Record<string, string> = { status: toStatus, ...bump };
       if (detail !== undefined) payload.detail = detail;
-      const { data, error } = await supabase.from("inbound_events")
+      const { data, error } = await store.from("inbound_events")
         .update(payload)
         .eq("event_id", eventId).eq("owner", attemptId).eq("status", fromStatus)
         .select("event_id");
       return !error && (data?.length ?? 0) === 1;
     };
     const setIntent = async (detail: string, idemKey: string, payload: Record<string, string>): Promise<boolean> => {
-      const { data, error } = await supabase.from("inbound_events")
+      const { data, error } = await store.from("inbound_events")
         .update({ status: "db_done", detail, idem_key: idemKey, payload, first_attempt_at: new Date().toISOString(), ...bump })
         .eq("event_id", eventId).eq("owner", attemptId)
         .select("event_id");
       return !error && (data?.length ?? 0) === 1;
     };
     const claimSendTurn = async (detail: string): Promise<boolean> => {
-      const { data, error } = await supabase.from("inbound_events")
+      const { data, error } = await store.from("inbound_events")
         .update({ status: "sending", detail, ...bump })
         .eq("event_id", eventId).eq("owner", attemptId)
         .in("status", ["db_done", "sending"])
@@ -222,7 +241,7 @@ Deno.serve(async (req) => {
     // Adoption CAS for claims this attempt did not insert (redeliveries):
     // match the exact version read, flip owner to this attempt.
     const adoptClaim = async (fromStatus: string, version: number, patch: Record<string, unknown>): Promise<boolean> => {
-      const { data, error } = await supabase.from("inbound_events")
+      const { data, error } = await store.from("inbound_events")
         .update({ ...patch, owner: attemptId, version: version + 1, ...bump })
         .eq("event_id", eventId).eq("status", fromStatus).eq("version", version)
         .select("event_id");
@@ -233,12 +252,34 @@ Deno.serve(async (req) => {
     let resumeIdemKey: string | null = null;
     let resumePayload: Record<string, string> | null = null;
     let resumeFirstAttempt: string | null = null;
-    const { error: derr } = await supabase.from("inbound_events").insert(
-      { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from, status: "processing", owner: attemptId, version: 1 }
-    );
+    // Keyword class is decided BEFORE claiming so STOP/START can claim
+    // atomically WITH their suppression mutation (inbound_claim_keyword RPC,
+    // single transaction: claim insert + opt-out upsert / opt-in delete).
+    // This closes the crash window between claim and suppression: both land
+    // or neither does. A duplicate never re-applies suppression, so an old
+    // STOP redelivery cannot resurrect what a later START removed.
+    const kw = text.trim().toUpperCase().replace(/\s+/g, " ");
+    const isOptOut = ["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(kw);
+    const isOptIn = ["START", "UNSTOP"].includes(kw);
+    let derr: { code?: string } | null = null;
+    if (isOptOut || isOptIn) {
+      const { data: claimRes, error: rpcErr } = await store.rpc("inbound_claim_keyword", {
+        p_event_id: eventId, p_event_type: String(data.event_type ?? ""), p_from_phone: from,
+        p_action: isOptOut ? "optout" : "optin", p_keyword: kw, p_owner: attemptId,
+      });
+      if (rpcErr || (claimRes !== "claimed" && claimRes !== "duplicate")) {
+        return json({ error: "dedupe store unavailable" }, 500); // fail closed, provider redelivers
+      }
+      if (claimRes === "duplicate") derr = { code: "23505" }; // same read/adopt path as a plain conflict
+    } else {
+      const { error: e2 } = await store.from("inbound_events").insert(
+        { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from, status: "processing", owner: attemptId, version: 1 }
+      );
+      derr = e2;
+    }
     if (derr) {
-      if ((derr as any).code !== "23505") return json({ error: "dedupe store unavailable" }, 500);
-      const { data: ex, error: exErr } = await supabase.from("inbound_events")
+      if (derr.code !== "23505") return json({ error: "dedupe store unavailable" }, 500);
+      const { data: ex, error: exErr } = await store.from("inbound_events")
         .select("status, detail, updated_at, version, idem_key, payload, first_attempt_at").eq("event_id", eventId).maybeSingle();
       if (exErr || !ex) return json({ error: "dedupe state unreadable" }, 500);
       if (ex.status === "done") return json({ ok: true, deduped: true });
@@ -263,7 +304,7 @@ Deno.serve(async (req) => {
         resumeFirstAttempt = ex.first_attempt_at ?? null; // and its immutable attempt time
       } else {
         // 'processing' or 'sending': another worker owns it, or one crashed.
-        const stale = Date.now() - Date.parse(ex.updated_at) > 120_000;
+        const stale = now() - Date.parse(ex.updated_at) > 120_000;
         if (!stale) {
           // Non-2xx so the provider retries later - never ack a concurrent
           // duplicate and mask a first-worker failure.
@@ -292,7 +333,7 @@ Deno.serve(async (req) => {
       }
     }
 
-    const gated = Deno.env.get("TELNYX_SEND_ENABLED") !== "true";
+    const gated = env.get("TELNYX_SEND_ENABLED") !== "true";
 
     // Shared confirmation flow for STOP/START/HELP: mutate + verify durable,
     // persist the intended reply, then send once per outcome rules.
@@ -316,14 +357,14 @@ Deno.serve(async (req) => {
         // for the life of this claim. The payload is built once, now, from
         // the current connection config - later attempts never rebuild it,
         // so key and payload can never drift apart.
-        const { data: crows, error: connErr } = await supabase.rpc("get_connection", { p_provider: "telnyx" });
+        const { data: crows, error: connErr } = await store.rpc("get_connection", { p_provider: "telnyx" });
         const conn = crows?.[0];
         if (connErr || !conn?.api_key || !conn?.meta?.from_number) {
           return json({ error: "sms provider not configured; not sent" }, 500);
         }
         payload = { from: conn.meta.from_number, to: from, text: reply };
         if (conn.meta?.messaging_profile_id) payload.messaging_profile_id = conn.meta.messaging_profile_id;
-        idemKey = crypto.randomUUID();
+        idemKey = randomUUID();
         if (!(await setIntent(reply, idemKey, payload))) {
           return json({ error: "could not persist send intent; not sent" }, 500);
         }
@@ -336,7 +377,7 @@ Deno.serve(async (req) => {
         // claim status, must prove a sane in-window first attempt: missing,
         // expired or future timestamps hold the claim for the desk.
         const firstAttempt = Date.parse(resumeFirstAttempt ?? "");
-        const age = Date.now() - firstAttempt;
+        const age = now() - firstAttempt;
         if (!idemKey || !payload || !Number.isFinite(firstAttempt) || age < 0 || age >= 23 * 60 * 60 * 1000) {
           await setClaim("uncertain", "resumed send outside the provider replay window or intent incomplete; held for reconciliation - desk verifies with provider by idempotency key before any fresh send. intended: " + effective);
           return json({ ok: true, deduped: true, held: "replay window expired or intent incomplete; no automatic resend" });
@@ -357,7 +398,7 @@ Deno.serve(async (req) => {
       if (!(await claimSendTurn(effective))) {
         return json({ error: "event in progress" }, 409);
       }
-      const sent = await sendSms(payload!, idemKey!);
+      const sent = await doSend(payload!, idemKey!);
       if (sent.outcome === "sent") {
         // 2xx = accepted, not delivered; keep the provider id for the desk.
         if (!(await setClaim("done", effective + (sent.providerId ? " [provider " + sent.providerId + "]" : "")))) {
@@ -394,32 +435,31 @@ Deno.serve(async (req) => {
     // STOP/START/HELP per the published sms-terms. These short-circuit all
     // other routing; the confirmation text is the "one final text" the terms
     // promise. Opt-out rows are honored by reminders-send before every send.
-    const kw = text.trim().toUpperCase().replace(/\s+/g, " ");
-    if (["STOP", "STOPALL", "UNSUBSCRIBE", "CANCEL", "END", "QUIT"].includes(kw)) {
+    if (isOptOut) {
       return await completeWithConfirmation(
         "opted_out",
         "BreakerOps: You are unsubscribed and will receive no more texts. Reply START to resubscribe.",
         async () => {
-          const { error: oerr } = await supabase.from("sms_opt_outs").upsert(
+          const { error: oerr } = await store.from("sms_opt_outs").upsert(
             { phone: from, opted_out_at: new Date().toISOString(), keyword: kw },
             { onConflict: "phone" }
           );
           if (oerr) return "opt-out store failed";
           // Confirm only what is durable: re-read before the "one final text".
-          const { data: chk, error: cerr } = await supabase.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
+          const { data: chk, error: cerr } = await store.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
           if (cerr || !chk) return "opt-out state not durable";
           return null;
         },
       );
     }
-    if (["START", "UNSTOP"].includes(kw)) {
+    if (isOptIn) {
       return await completeWithConfirmation(
         "opted_in",
         "BreakerOps: You are resubscribed to texts. Reply STOP to opt out, HELP for help. Msg&data rates may apply.",
         async () => {
-          const { error: derr2 } = await supabase.from("sms_opt_outs").delete().eq("phone", from);
+          const { error: derr2 } = await store.from("sms_opt_outs").delete().eq("phone", from);
           if (derr2) return "opt-in store failed";
-          const { data: still, error: serr } = await supabase.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
+          const { data: still, error: serr } = await store.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
           if (serr || still) return "opt-in state not durable";
           return null;
         },
@@ -433,7 +473,7 @@ Deno.serve(async (req) => {
       );
     }
 
-    const { data: admission, error } = await supabase.rpc("invite_redeem_on_inbound", { p_phone: from });
+    const { data: admission, error } = await store.rpc("invite_redeem_on_inbound", { p_phone: from });
     if (error) {
       // activation disabled or a data problem: log for the desk, never reply blindly
       return json({ ok: true, status: "unrouted", reason: String(error.message || error), send: "disabled" });
@@ -450,4 +490,17 @@ Deno.serve(async (req) => {
   } catch (e) {
     return json({ error: String(e) }, 500);
   }
-});
+  };
+}
+
+// Edge wiring (Deno only). Dynamic import keeps the module loadable off-edge
+// for the handler tests; in Node this block never executes.
+if ((globalThis as { Deno?: unknown }).Deno) {
+  const DenoRef = (globalThis as { Deno: { serve: (h: (r: Request) => Promise<Response>) => void; env: TelnyxEnv } }).Deno;
+  const { createClient } = await import("https://esm.sh/@supabase/supabase-js@2");
+  const store = createClient(
+    DenoRef.env.get("SUPABASE_URL")!,
+    DenoRef.env.get("SUPABASE_SERVICE_ROLE_KEY")!
+  ) as unknown as TelnyxStore;
+  DenoRef.serve(createTelnyxInboundHandler({ store, env: DenoRef.env }));
+}
