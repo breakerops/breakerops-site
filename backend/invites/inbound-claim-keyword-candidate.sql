@@ -75,11 +75,13 @@ begin
   --    never raise the anchor, or a real later STOP looks 'stale' and is
   --    dropped (F-C poisoning). A legitimate sub-second provider clock lead
   --    simply falls to the safe side.
-  --  * non-finite values (-infinity/+infinity) and implausibly-old values
-  --    (before 2020 - the business and provider account did not exist):
+  --  * non-finite values (-infinity/+infinity) and implausibly-old values:
   --    a bogus-LOW STOP must never be dropped as 'stale' against a real
   --    anchor (F-D, the dangerous mirror), and a bogus-low START must
-  --    never anchor at -infinity.
+  --    never anchor at -infinity. The 2020 cutoff is a DEFENSIVE DESIGN
+  --    BOUND only - no sourced business/provider history is claimed; it is
+  --    conservative in the safe direction (converts to ambiguous, never
+  --    auto-applies anything).
   begin
     v_occurred := p_occurred_at::timestamptz;
     if v_occurred is not null and (
