@@ -93,7 +93,7 @@ function makeTable(pk: string) {
   };
   return table;
 }
-function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: any[] } = {}) {
+function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: any[]; sendLatch?: Promise<void> } = {}) {
   const inbound = makeTable("event_id");
   const optouts = makeTable("phone");
   const sends: { payload: Record<string, string>; idemKey: string }[] = [];
@@ -155,11 +155,18 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
     k === "TELNYX_WEBHOOK_PUBLIC_KEY" ? pubB64 :
     k === "TELNYX_SEND_ENABLED" ? (opts.sendGate === false ? "true" : undefined) : undefined };
   const sendSms = async (payload: Record<string, string>, idemKey: string) => {
+    if (opts.sendLatch) await opts.sendLatch;
     sends.push({ payload, idemKey });
     return sendQueue.length ? sendQueue.shift() : { outcome: "sent", providerId: "msg_test_1" };
   };
-  const h = createTelnyxInboundHandler({ store, env, sendSms });
-  return { h, inbound, optouts, sends, rpcCalls, rpcFaults, kwState };
+  const bgTasks: Promise<unknown>[] = [];
+  const rawH = createTelnyxInboundHandler({ store, env, sendSms, bg: (p: Promise<unknown>) => bgTasks.push(p) });
+  const h = async (req: Request) => {
+    const r = await rawH(req);
+    await Promise.all(bgTasks.splice(0)); // ack-fast: response first, background flow completes after
+    return r;
+  };
+  return { h, rawH, bgTasks, inbound, optouts, sends, rpcCalls, rpcFaults, kwState };
 }
 const STOP = "STOP";
 
@@ -188,7 +195,7 @@ const STOP = "STOP";
   const r = await h(signedReq(evt(STOP)));
   const j = await r.json();
   const claim = inbound.rows[0];
-  ok(j.status === "opted_out" && j.reply_sent === true, "STOP: replied opted_out");
+  ok(j.accepted === true && optouts.rows.length === 1 && sends.length === 1, "STOP: acked fast, suppression + one confirmation sent in background");
   ok(optouts.rows.length === 1 && optouts.rows[0].phone === "+15551234567" && optouts.rows[0].keyword === "STOP",
     "STOP: suppression row durable");
   ok(claim.status === "done" && claim.detail.includes("msg_test_1"), "STOP: claim done with provider id recorded");
@@ -207,7 +214,7 @@ const STOP = "STOP";
   // redelivery after the crash: lands cleanly
   const r2 = await h(signedReq(evt(STOP, "evt-5")));
   const j2 = await r2.json();
-  ok(j2.status === "opted_out" && optouts.rows.length === 1 && inbound.rows[0].status === "done",
+  ok(j2.accepted === true && optouts.rows.length === 1 && inbound.rows[0].status === "done",
     "F1b: redelivery recovers - claim + suppression land together");
 }
 // 6: crash AFTER atomic claim, BEFORE send intent -> suppression ALREADY durable (F1 window closed)
@@ -215,14 +222,14 @@ const STOP = "STOP";
   const { h, inbound, optouts, sends, rpcFaults } = makeWorld({ sendGate: false });
   inbound.faults.update = 1; // setIntent's first CAS write fails = crash before intent persists
   const r = await h(signedReq(evt(STOP, "evt-6")));
-  ok(r.status === 500 && optouts.rows.length === 1 && inbound.rows[0].status === "processing" &&
+  ok(r.status === 200 && optouts.rows.length === 1 && inbound.rows[0].status === "processing" &&
      sends.length === 0 && !inbound.rows[0].idem_key,
-    "F1 closed: crash post-claim pre-intent still leaves suppression durable");
+    "F1 closed: crash post-claim pre-intent still leaves suppression durable (ack-fast: failure lives on the claim row, not the response)");
   // stale redelivery: adopt, rerun idempotent step, complete
   inbound.rows[0].updated_at = new Date(Date.now() - 180_000).toISOString();
   const r2 = await h(signedReq(evt(STOP, "evt-6")));
   const j2 = await r2.json();
-  ok(j2.reply_sent === true && sends.length === 1 && optouts.rows.length === 1 && inbound.rows[0].status === "done",
+  ok(j2.accepted === true && sends.length === 1 && optouts.rows.length === 1 && inbound.rows[0].status === "done",
     "F1 closed: stale redelivery completes, suppression never duplicated");
   void rpcFaults;
 }
@@ -231,7 +238,7 @@ const STOP = "STOP";
   const { h, inbound, optouts, sends } = makeWorld({ sendGate: true });
   const r = await h(signedReq(evt(STOP, "evt-7")));
   const j = await r.json();
-  ok(j.send === "disabled" && sends.length === 0 && optouts.rows.length === 1 &&
+  ok(j.accepted === true && sends.length === 0 && optouts.rows.length === 1 &&
      inbound.rows[0].status === "done" && inbound.rows[0].detail.startsWith("send disabled"),
     "STOP gated: suppression durable, no SMS spend, claim done");
 }
@@ -250,7 +257,7 @@ const STOP = "STOP";
   const origUpsert = w => w; void origUpsert;
   const r = await h(signedReq(evt(STOP, "evt-8")));
   const j = await r.json();
-  ok(j.reply_sent === true && sends.length === 1 && sends[0].idemKey === key &&
+  ok(j.accepted === true && sends.length === 1 && sends[0].idemKey === key &&
      sends[0].payload.text === inbound.rows[0].payload.text,
     "crash-after-intent: resumed with ORIGINAL key+payload, send-only retry");
   ok(upserts === 0, "crash-after-intent: DB mutation NOT re-run");
@@ -267,7 +274,7 @@ const STOP = "STOP";
     updated_at: new Date(Date.now() - 180_000).toISOString() });
   const r = await h(signedReq(evt(STOP, "evt-9")));
   const j = await r.json();
-  ok(j.reply_sent === true && sends.length === 1 && sends[0].idemKey === key && inbound.rows[0].status === "done",
+  ok(j.accepted === true && sends.length === 1 && sends[0].idemKey === key && inbound.rows[0].status === "done",
     "stale sending in-window: adopted, resumed same key, done");
 }
 // 10: stale 'sending' OUTSIDE window -> uncertain, no send
@@ -280,8 +287,8 @@ const STOP = "STOP";
     updated_at: new Date(Date.now() - 180_000).toISOString() });
   const r = await h(signedReq(evt(STOP, "evt-10")));
   const j = await r.json();
-  ok(sends.length === 0 && inbound.rows[0].status === "uncertain" && j.deduped === true,
-    "stale sending out-of-window: held uncertain, NO resend");
+  ok(sends.length === 0 && inbound.rows[0].status === "uncertain" && j.accepted === true,
+    "stale sending out-of-window: held uncertain, NO resend (acked fast, uncertainty on the claim row)");
 }
 // 11: fresh 'processing' -> 409, no send
 {
@@ -300,7 +307,7 @@ const STOP = "STOP";
     updated_at: new Date(Date.now() - 180_000).toISOString() });
   const r = await h(signedReq(evt(STOP, "evt-12")));
   const j = await r.json();
-  ok(j.reply_sent === true && optouts.rows.length === 1 && inbound.rows[0].status === "done" && sends.length === 1,
+  ok(j.accepted === true && optouts.rows.length === 1 && inbound.rows[0].status === "done" && sends.length === 1,
     "stale processing: reclaimed by exactly one worker, full flow re-run idempotently");
 }
 // 13: done redelivery -> ack, no side effects
@@ -326,8 +333,8 @@ const STOP = "STOP";
 {
   const { h, inbound, sends } = makeWorld({ sendGate: false, sendResults: [{ outcome: "retryable", error: "telnyx 429" }] });
   const r = await h(signedReq(evt(STOP, "evt-15")));
-  ok(r.status === 500 && inbound.rows[0].status === "db_done" && inbound.rows[0].idem_key &&
-     sends.length === 1, "429: claim back to db_done with SAME key parked for redelivery");
+  ok(r.status === 200 && inbound.rows[0].status === "db_done" && inbound.rows[0].idem_key &&
+     sends.length === 1, "429: acked fast; claim back to db_done with SAME key parked for internal recovery");
 }
 // 16: permanent 4xx -> failed terminal; redelivery acked, never resent
 {
@@ -354,7 +361,7 @@ const STOP = "STOP";
   optouts.rows.push({ phone: "+15551234567", opted_out_at: new Date().toISOString(), keyword: "STOP" });
   const r = await h(signedReq(evt("START", "evt-18", "+15551234567", "2026-10-25T04:00:10Z")));
   const j = await r.json();
-  ok(j.status === "opted_in" && optouts.rows.length === 0 && sends.length === 1,
+  ok(j.accepted === true && optouts.rows.length === 0 && sends.length === 1,
     "START: suppression removed + verified, resubscribe confirmation sent");
 }
 // 19: HELP: no opt-out mutation, reply sent
@@ -362,14 +369,14 @@ const STOP = "STOP";
   const { h, optouts, sends } = makeWorld({ sendGate: false });
   const r = await h(signedReq(evt("HELP", "evt-19")));
   const j = await r.json();
-  ok(j.status === "help" && optouts.rows.length === 0 && sends.length === 1, "HELP: reply only, no mutation");
+  ok(j.accepted === true && optouts.rows.length === 0 && sends.length === 1, "HELP: reply only, no mutation");
 }
 // 20: ordinary text -> redeem rpc, stub routing, captured:false (reply path unbuilt)
 {
   const { h, inbound, sends } = makeWorld({ sendGate: false, rpcRedeem: { data: { status: "admitted", business_id: "b1" }, error: null } });
   const r = await h(signedReq(evt("hi this is a customer", "evt-20")));
   const j = await r.json();
-  ok(j.status === "admitted" && j.routing === "stub-no-durable-capture" && j.captured === false &&
+  ok(j.accepted === true &&
      inbound.rows[0].status === "done" && sends.length === 0,
     "ordinary text: redeem called, stub routing, no capture claimed");
 }
@@ -378,14 +385,14 @@ const STOP = "STOP";
   const { h, sends } = makeWorld({ sendGate: false, rpcRedeem: { data: null, error: { message: "activation disabled" } } });
   const r = await h(signedReq(evt("hello", "evt-21")));
   const j = await r.json();
-  ok(j.status === "unrouted" && j.send === "disabled" && sends.length === 0, "redeem error: unrouted, no blind reply");
+  ok(j.accepted === true && sends.length === 0, "redeem error: acked, unrouted recorded, no blind reply");
 }
 // 22: concurrent double-delivery: exactly one claim, one suppression, one send
 {
   const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
   const [a, b] = await Promise.all([h(signedReq(evt(STOP, "evt-22"))), h(signedReq(evt(STOP, "evt-22")))]);
   const js = [await a.json(), await b.json()];
-  const okAcks = js.filter((j) => j.status === "opted_out" || j.deduped === true).length;
+  const okAcks = js.filter((j) => j.accepted === true || j.deduped === true).length;
   const conflicts = [a.status, b.status].filter((s) => s === 409).length;
   ok(inbound.rows.length === 1 && optouts.rows.length === 1 && sends.length === 1 &&
      okAcks + conflicts === 2 && okAcks >= 1 && js.every((j) => !j.error || a.status === 409 || b.status === 409),
@@ -472,7 +479,7 @@ const STOP = "STOP";
   const { h, optouts } = makeWorld({ sendGate: false });
   const r = await h(signedReq(evt(STOP, "evt-35")));
   const j = await r.json();
-  ok(j.status === "opted_out" && optouts.rows.length === 1, "unknown-ts STOP applies on the safe side");
+  ok(j.accepted === true && optouts.rows.length === 1, "unknown-ts STOP applies on the safe side");
 }
 // 36: unknown-ts STOP then timestamped START newer than the old anchor -> HELD (main's hole)
 {
@@ -496,7 +503,7 @@ const STOP = "STOP";
   // note: no opt-outs row - a newer START already removed it
   const r = await h(signedReq(evt(STOP, "evt-37")));
   const j = await r.json();
-  ok(j.deduped === true && sends.length === 0 && inbound.rows[0].status === "stale_event",
+  ok(j.accepted === true && sends.length === 0 && inbound.rows[0].status === "stale_event",
     "in-flight contradiction: unsubscribed text NOT sent when a newer START already committed");
 }
 // 38: reverse contradiction - START confirmation intent persisted, but a newer STOP re-suppressed
@@ -510,7 +517,7 @@ const STOP = "STOP";
     first_attempt_at: new Date().toISOString(), updated_at: new Date(Date.now() - 180_000).toISOString() });
   const r = await h(signedReq(evt("START", "evt-38")));
   const j = await r.json();
-  ok(j.deduped === true && sends.length === 0 && inbound.rows[0].status === "stale_event",
+  ok(j.accepted === true && sends.length === 0 && inbound.rows[0].status === "stale_event",
     "in-flight contradiction: resubscribed text NOT sent when a newer STOP already committed");
 }
 // 39: redelivery of stale_event / held claims -> deduped ack, no resend
@@ -562,7 +569,7 @@ const STOP = "STOP";
     "future-ts START treated as ambiguous: held, not applied");
   const r2 = await h(signedReq(evt(STOP, "evt-42b", "+15551234567", future)));
   const j2 = await r2.json();
-  ok(j2.status === "opted_out" && optouts.rows.length === 1, "future-ts STOP applies on the safe side");
+  ok(j2.accepted === true && optouts.rows.length === 1, "future-ts STOP applies on the safe side");
 }
 // 43: horizon equality is ambiguous - a START exactly AT the horizon is held
 {
@@ -587,7 +594,7 @@ const STOP = "STOP";
   kwState.set("+15551234567", { lastOccurredAt: Date.parse("2030-01-01T00:00:00Z"), unknownHorizon: null, lastAction: "optin" });
   const r = await h(signedReq(evt(STOP, "evt-45", "+15551234567", "2026-10-25T04:00:00Z")));
   const j = await r.json();
-  ok(j.status === "opted_out" && optouts.rows.length === 1,
+  ok(j.accepted === true && optouts.rows.length === 1,
     "poisoned 2030 anchor repaired at read: real STOP applies, not dropped as stale");
 }
 // 46: future-dated START cannot poison the anchor at all
@@ -598,7 +605,22 @@ const STOP = "STOP";
     "future-dated START: held, no state written, anchor cannot be poisoned");
   const r = await h(signedReq(evt(STOP, "evt-46b", "+15551234567", "2026-10-25T04:00:00Z")));
   const j = await r.json();
-  ok(j.status === "opted_out" && optouts.rows.length === 1, "real STOP after future-START attempt applies");
+  ok(j.accepted === true && optouts.rows.length === 1, "real STOP after future-START attempt applies");
+}
+
+
+// 47: ack-fast proof - the 2xx returns BEFORE the post-claim flow can finish
+{
+  let release!: () => void;
+  const latch = new Promise<void>((res) => { release = res; });
+  const { rawH, bgTasks, optouts, sends } = makeWorld({ sendGate: false, sendLatch: latch });
+  const r = await rawH(signedReq(evt(STOP, "evt-47"))); // send is latch-blocked mid-flow
+  const j = await r.json();
+  ok(j.accepted === true && optouts.rows.length === 1 && sends.length === 0 && bgTasks.length === 1,
+    "ack-fast: 2xx returned with suppression already durable while the confirmation was still blocked in the background");
+  release();
+  await Promise.all(bgTasks.splice(0));
+  ok(sends.length === 1, "background flow then completes the confirmation");
 }
 
 console.log(`all ${passed} checks passed`);
