@@ -87,6 +87,11 @@ begin
  select count(*) into n from public.billing_profiles;
  if n<>0 then raise exception 'TEST nonmember read'; end if;
 
+ -- non-member cannot use billing_entitlement as an existence/lifecycle
+ -- oracle on another business's UUID (membership guard in billing.sql)
+ if public.billing_entitlement(b1) is not null then raise exception 'TEST entitlement nonmember oracle'; end if;
+ if public.billing_entitlement(b2) is not null then raise exception 'TEST entitlement nonmember oracle purged'; end if;
+
  -- authenticated can never write billing_profiles (service role only)
  begin
   insert into public.billing_profiles(business_id) values (b2);
