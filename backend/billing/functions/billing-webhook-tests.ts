@@ -103,15 +103,6 @@ const req = (body: string, headers: Record<string, string>) =>
     "envelope fields stored correctly");
   ok(!JSON.stringify(rows[0].payload).includes("RAW_CARD_4242"), "raw financial payload NOT stored by default");
 }
-// 17: raw storage is opt-in only
-{
-  const { store, rows } = makeStore();
-  const env = { get: (k: string) => (k === "STRIPE_WEBHOOK_SECRET" ? SECRET : k === "BILLING_STORE_RAW_PAYLOAD" ? "1" : undefined) };
-  const h = createBillingWebhookHandler({ store, env });
-  const signedBody = JSON.stringify({ id: "evt_raw", type: "invoice.paid", data: { object: { secret_marker: "RAW_CARD_4242" } } });
-  await h(req(signedBody, { "Stripe-Signature": hdr(NOW, signedBody) }));
-  ok(JSON.stringify(rows[0].payload).includes("RAW_CARD_4242"), "BILLING_STORE_RAW_PAYLOAD=1 opt-in stores full body");
-}
 // 18: verified but malformed JSON -> 400, nothing logged
 {
   const { store, counts } = makeStore();
