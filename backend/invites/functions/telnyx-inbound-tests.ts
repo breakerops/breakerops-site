@@ -111,14 +111,18 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         const occurred = a.p_occurred_at ? Date.parse(a.p_occurred_at) : NaN;
         const occ = Number.isFinite(occurred) ? occurred : null;
         let st = kwState.get(a.p_from_phone);
+        // read-side poisoned-anchor repair happens BEFORE stale evaluation
+        if (st && st.lastOccurredAt !== null && st.lastOccurredAt > Date.now()) {
+          st = { ...st, lastOccurredAt: null, unknownHorizon: st.unknownHorizon ?? Date.now() };
+        }
         let claimStatus = "processing";
         if (st && st.lastOccurredAt !== null && occ !== null && occ < st.lastOccurredAt) claimStatus = "stale_event";
-        // v3.4: future-beyond-skew timestamps are treated as unknown; horizon
-        // equality is ambiguous (held), only strictly-greater applies
-        const occEff = occ !== null && occ > Date.now() + 300_000 ? null : occ;
+        // v3.5: ANY future timestamp distrusted; horizon blocks ALL optins
+        // (no cross-clock auto-apply without a grounded skew bound)
+        const occEff = occ !== null && occ > Date.now() ? null : occ;
         let claimStatus2 = claimStatus;
         if (a.p_action === "optin" && claimStatus === "processing" && (occEff === null
-          || (st && st.unknownHorizon !== null && occEff <= st.unknownHorizon)
+          || (st && st.unknownHorizon !== null)
           || (st && st.lastOccurredAt !== null && occEff === st.lastOccurredAt))) claimStatus2 = "held";
         claimStatus = claimStatus2;
         if (inbound.rows.some((r) => r.event_id === a.p_event_id)) return { data: "duplicate", error: null };
@@ -136,9 +140,9 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         }
         kwState.set(a.p_from_phone, {
           lastOccurredAt: occEff ?? (st ? st.lastOccurredAt : null),
-          unknownHorizon: a.p_action === "optin" ? null
-            : occEff === null ? Math.max(st?.unknownHorizon ?? -Infinity, Date.now())
-            : (st ? st.unknownHorizon : null),
+          unknownHorizon: a.p_action === "optout" && occEff === null
+            ? Math.max(st?.unknownHorizon ?? -Infinity, Date.now())
+            : (st ? st.unknownHorizon : null),  // horizon never auto-clears; desk reconciles
           lastAction: a.p_action });
         return { data: "claimed", error: null };
       }
@@ -155,7 +159,7 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
     return sendQueue.length ? sendQueue.shift() : { outcome: "sent", providerId: "msg_test_1" };
   };
   const h = createTelnyxInboundHandler({ store, env, sendSms });
-  return { h, inbound, optouts, sends, rpcCalls, rpcFaults };
+  return { h, inbound, optouts, sends, rpcCalls, rpcFaults, kwState };
 }
 const STOP = "STOP";
 
@@ -534,20 +538,18 @@ const STOP = "STOP";
 }
 
 
-// 41: horizon precision - unknown-ts STOP, then a START provably newer than its received time APPLIES
+// 41: horizon discipline - unknown-ts STOP: NO timestamped START auto-applies while the horizon stands
 {
   const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
   await h(signedReq(evt(STOP, "evt-41a"))); // unknown ts -> applies, horizon = its received time (now)
   sends.length = 0;
-  const nearFuture = new Date(Date.now() + 120_000).toISOString(); // within the 5-min skew trust window
-  const r = await h(signedReq(evt("START", "evt-41b", "+15551234567", nearFuture)));
-  const j = await r.json();
-  ok(j.status === "opted_in" && optouts.rows.length === 0 && sends.length === 1,
-    "START provably newer than the unknown-STOP horizon applies (no over-blocking)");
-  // and an older-than-horizon START is held
-  const r2 = await h(signedReq(evt("START", "evt-41c", "+15551234567", "2026-10-25T04:00:00Z")));
-  const claim2 = inbound.rows.find((r) => r.event_id === "evt-41c");
-  ok(claim2.status === "stale_event" || claim2.status === "held", "older START after re-anchor is still blocked");
+  const r = await h(signedReq(evt("START", "evt-41b", "+15551234567", new Date(Date.now() - 1000).toISOString())));
+  const claim = inbound.rows.find((r) => r.event_id === "evt-41b");
+  ok(claim.status === "held" && optouts.rows.length === 1 && sends.length === 0,
+    "no cross-clock auto-apply: timestamped START held while the horizon stands (safe side)");
+  const r2 = await h(signedReq(evt("START", "evt-41c", "+15551234567", new Date().toISOString())));
+  ok(inbound.rows.find((r) => r.event_id === "evt-41c").status === "held" && optouts.rows.length === 1,
+    "START at ~horizon also held: cross-clock comparison proves nothing without a skew bound");
 }
 
 
@@ -576,6 +578,27 @@ const STOP = "STOP";
   const r = await h(signedReq(evt("START", "evt-44", "+15551234567", "not-a-timestamp")));
   ok(r.status === 200 && inbound.rows.find((r) => r.event_id === "evt-44").status === "held",
     "malformed occurred_at: START held, event claimed, 200 ack");
+}
+
+
+// 45: poisoned preexisting anchor cannot block a real STOP (read repair)
+{
+  const { h, optouts, kwState } = makeWorld({ sendGate: false });
+  kwState.set("+15551234567", { lastOccurredAt: Date.parse("2030-01-01T00:00:00Z"), unknownHorizon: null, lastAction: "optin" });
+  const r = await h(signedReq(evt(STOP, "evt-45", "+15551234567", "2026-10-25T04:00:00Z")));
+  const j = await r.json();
+  ok(j.status === "opted_out" && optouts.rows.length === 1,
+    "poisoned 2030 anchor repaired at read: real STOP applies, not dropped as stale");
+}
+// 46: future-dated START cannot poison the anchor at all
+{
+  const { h, inbound, optouts, kwState } = makeWorld({ sendGate: false });
+  await h(signedReq(evt("START", "evt-46a", "+15551234567", "2030-01-01T00:00:00Z")));
+  ok(inbound.rows.find((r) => r.event_id === "evt-46a").status === "held" && kwState.size === 0,
+    "future-dated START: held, no state written, anchor cannot be poisoned");
+  const r = await h(signedReq(evt(STOP, "evt-46b", "+15551234567", "2026-10-25T04:00:00Z")));
+  const j = await r.json();
+  ok(j.status === "opted_out" && optouts.rows.length === 1, "real STOP after future-START attempt applies");
 }
 
 console.log(`all ${passed} checks passed`);
