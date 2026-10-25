@@ -63,7 +63,25 @@ begin
  end;
 end $$;
 
--- part 2: switch to the authenticated role for RLS/grant tests
+-- part 2: switch to the authenticated role for RLS/grant tests.
+-- Negative control first: with the select grant revoked, a member read as
+-- the authenticated role MUST fail; this proves both that the role switch
+-- is binding and that the mirrored grant above is what makes reads work.
+revoke select on public.billing_profiles from authenticated;
+set local role authenticated;
+
+do $$
+begin
+ if current_role<>'authenticated' then raise exception 'TEST role switch binding'; end if;
+ begin
+  perform count(*) from public.billing_profiles;
+  raise exception 'TEST negative control: read without grant must fail';
+ exception when insufficient_privilege then null;
+ end;
+end $$;
+
+reset role;
+grant select on public.billing_profiles to authenticated;
 set local role authenticated;
 
 do $$
@@ -74,6 +92,7 @@ declare uid1 uuid='c1111111-1111-4111-8111-111111111111';
         n integer;
         e text;
 begin
+ if current_role<>'authenticated' then raise exception 'TEST role switch binding part 2'; end if;
  -- member reads own business profile only
  perform set_config('request.jwt.claim.sub',uid1::text,true);
  perform set_config('request.jwt.claims', json_build_object('sub',uid1,'role','authenticated')::text, true);
