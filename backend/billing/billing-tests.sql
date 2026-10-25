@@ -78,6 +78,10 @@ begin
  select count(*) into n from public.billing_profiles;
  if n<>1 then raise exception 'TEST member read own'; end if;
 
+ -- entitlement as an authenticated member (part 1 covers owner role only)
+ if public.billing_entitlement(b1)<>'pilot_manual' then raise exception 'TEST entitlement as member'; end if;
+ if public.billing_entitlement(b2)<>'none' then raise exception 'TEST entitlement as member purged'; end if;
+
  -- non-member reads nothing
  perform set_config('request.jwt.claim.sub',uid2::text,true);
  select count(*) into n from public.billing_profiles;
