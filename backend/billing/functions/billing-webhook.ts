@@ -14,8 +14,12 @@
 //                                  Wrong/missing token -> 401, never logged.
 // Payload minimization: by default only a minimal envelope (provider, event
 // id, event type, livemode, created, business_id) is stored - never the raw
-// financial payload. Full-body storage for local debugging requires the
-// explicit opt-in BILLING_STORE_RAW_PAYLOAD=1.
+// financial payload. Full-body storage exists behind BILLING_STORE_RAW_PAYLOAD=1
+// for local debugging ONLY; that opt-in is NOT APPROVED for any deployed
+// environment and must stay unset outside local tests.
+// Parser note: v1 signatures are compared byte-exact as sent; Stripe sends
+// canonical lowercase hex. A sender deviating (uppercase hex, odd spacing)
+// fails closed - intentional, no canonicalization churn.
 // Idempotency: provider+provider_event_id pre-check, plus a 23505 arm. The
 // pre-check alone is racy; this handler DEPENDS on the unique-index migration
 // candidate (dedupe, sha256 3cc426b2...) being applied before it is treated
@@ -27,6 +31,8 @@
 // createBillingWebhookHandler takes injected deps so the ACTUAL handler is
 // integration-testable off the edge runtime (billing-webhook-tests.ts).
 import { verifyStripeSignature } from "./stripe-signature.ts";
+
+const UUID_RE = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
 export interface BillingWebhookEnv {
   get(key: string): string | undefined;
@@ -70,15 +76,27 @@ async function logEvent(
       .eq("provider", provider).eq("provider_event_id", eventId).limit(1);
     if (dup && dup.length > 0) return { duplicate: true };
   }
-  const { error } = await store.from("billing_events").insert({
+  const row = {
     business_id: businessId, provider, provider_event_id: eventId,
     event_type: type, payload,
-  });
+  };
+  let { error } = await store.from("billing_events").insert(row);
+  // well-formed but unknown business_id (FK 23503): keep the money event,
+  // file it unassigned and flagged - never map it to another business and
+  // never fail the delivery with an untrusted-FK 500
+  if (error && error.code === "23503" && businessId) {
+    const retry = await store.from("billing_events").insert({
+      ...row, business_id: null,
+      payload: { ...(typeof payload === "object" && payload !== null ? payload : { raw: true }),
+                 business_id_unresolved: true },
+    });
+    error = retry.error;
+  }
   // race-safe arm of the dedupe: with the unique index in place, a
   // concurrent redelivery loses the insert - that IS a duplicate, not an error
   if (error) {
     if (error.code === "23505") return { duplicate: true };
-    return { error: error.message ?? "insert failed" };
+    return { error: "event storage failed" }; // generic: never echo raw DB errors
   }
   return { duplicate: false };
 }
@@ -109,12 +127,17 @@ export function createBillingWebhookHandler(deps: { store: BillingWebhookStore; 
         return Response.json({ ok: false, error: "verified but malformed event" }, { status: 400 });
       }
       const obj = (body?.data as { object?: { metadata?: { business_id?: string } } } | undefined)?.object;
-      const businessId = obj?.metadata?.business_id ?? null;
+      // untrusted metadata: accept only a well-formed UUID, never echo or
+      // guess a mapping. A non-UUID value is dropped, never mapped across.
+      const rawBiz = obj?.metadata?.business_id;
+      const businessId = typeof rawBiz === "string" && UUID_RE.test(rawBiz) ? rawBiz : null;
+      const bizUnresolved = businessId === null && rawBiz != null;
       const payload = storeRaw
         ? body
-        : { id: body.id ?? null, type: body.type, livemode: body.livemode ?? null, created: body.created ?? null };
+        : { id: body.id ?? null, type: body.type, livemode: body.livemode ?? null, created: body.created ?? null,
+            ...(bizUnresolved ? { business_id_unresolved: true } : {}) };
       const r = await logEvent(store, businessId, "stripe", (body.id as string) ?? null, body.type, payload);
-      if (r.error) return Response.json({ ok: false, error: r.error }, { status: 500 });
+      if (r.error) return Response.json({ ok: false, error: "event storage failed" }, { status: 500 });
       return Response.json({ ok: true, verified: true, duplicate: r.duplicate, note: "logged only; no state changed" });
     }
 
@@ -141,7 +164,7 @@ export function createBillingWebhookHandler(deps: { store: BillingWebhookStore; 
     }
     const payload = storeRaw ? body : { id: body.id ?? null, type: body.type };
     const r = await logEvent(store, body.business_id ?? null, "placeholder", body.id ?? null, body.type, payload);
-    if (r.error) return Response.json({ ok: false, error: r.error }, { status: 500 });
+    if (r.error) return Response.json({ ok: false, error: "event storage failed" }, { status: 500 });
     return Response.json({ ok: true, placeholder: true, duplicate: r.duplicate, note: "logged only; no state changed" });
   };
 }
