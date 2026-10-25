@@ -84,22 +84,36 @@ begin
     v_occurred := null;
   end;
   select * into v_state from public.sms_keyword_state where phone = p_from_phone for update;
+  -- Poisoned-anchor repair (read-side, conservative): a preexisting anchor
+  -- in the FUTURE of now() is untrustworthy (no write here can prove how it
+  -- got there). Ignore it and treat the row as horizon-bearing, so a real
+  -- STOP can never be dropped as 'stale' against a bogus future anchor.
+  if v_state.phone is not null and v_state.last_occurred_at is not null and v_state.last_occurred_at > now() then
+    v_state.last_occurred_at := null;
+    if v_state.unknown_received_at is null then
+      v_state.unknown_received_at := now();
+    end if;
+  end if;
 
   if found and v_state.last_occurred_at is not null and v_occurred is not null
      and v_occurred < v_state.last_occurred_at then
     v_claim_status := 'stale_event';
   elsif p_action = 'optin'
      and (v_occurred is null
-          or (found and v_state.unknown_received_at is not null
-              and v_occurred <= v_state.unknown_received_at)
+          or (found and v_state.unknown_received_at is not null)
           or (found and v_state.last_occurred_at is not null and v_occurred = v_state.last_occurred_at)) then
-    -- ambiguous resubscribe: unknown-ts incoming; OR a timestamped START
-    -- that cannot be proven newer than an applied unknown-ts STOP (which is
-    -- known only to have occurred at or before its RECEIVED time - the
-    -- horizon); OR an exact anchor tie. Never auto-applied; desk reconciles.
-    -- A START with occurred_at strictly greater than the horizon is
-    -- provably newer and applies; equality stays ambiguous (held) - no
-    -- timestamp precision or clock-skew guarantee is assumed.
+    -- ambiguous resubscribe, never auto-applied: unknown-ts incoming; OR
+    -- ANY START while an unknown-ts horizon stands; OR an exact anchor tie.
+    -- CROSS-CLOCK DISCIPLINE: the horizon is OUR clock (received time),
+    -- occurred_at is the PROVIDER's clock, and no official Telnyx source
+    -- documents a skew or precision bound between them (checked: webhook
+    -- fundamentals + messaging webhook + receive-message pages). Without a
+    -- grounded bound a cross-clock 'newer' comparison proves NOTHING, so no
+    -- timestamped START auto-applies while the horizon stands; suppression
+    -- stays until desk reconciliation clears the horizon. The anchor
+    -- comparison is different: both sides are provider-clock occurred_at
+    -- values, one clock domain, so ordering there is meaningful.
+    -- Over-holding is the safe side: the user stays suppressed.
     v_claim_status := 'held';
   end if;
 
@@ -127,18 +141,19 @@ begin
     on conflict (phone) do update
       set last_occurred_at = coalesce(excluded.last_occurred_at, public.sms_keyword_state.last_occurred_at),
           unknown_received_at = case
-            when p_action = 'optin' then null           -- an applied START was proven newer: horizon closed
-            when v_occurred is null then greatest(coalesce(public.sms_keyword_state.unknown_received_at, '-infinity'::timestamptz), now())
+            when v_occurred is null and p_action = 'optout'
+              then greatest(coalesce(public.sms_keyword_state.unknown_received_at, '-infinity'::timestamptz), now())
             else public.sms_keyword_state.unknown_received_at
-          end,
+          end,  -- horizon NEVER auto-clears (no cross-clock proof exists); desk reconciliation clears it
           last_action = excluded.last_action,
           last_event_id = excluded.last_event_id,
           updated_at = now();
   -- anchor/horizon rules: an applied unknown-ts event (only STOPs can be
   -- applied with unknown ts - ambiguous STARTs are held) sets or refreshes
   -- the uncertainty horizon to its received time without erasing the newest
-  -- known anchor; an applied START clears the horizon because it was proven
-  -- newer than everything ambiguous before it.
+  -- known anchor. The horizon is never cleared by code: clearing requires
+  -- desk reconciliation (a verified resubscribe), which is a separate
+  -- unbuilt path, so held STARTs stay held and visible until then.
   return 'claimed';
 end $$;
 revoke all on function public.inbound_claim_keyword(text,text,text,text,text,text,text) from public, anon, authenticated;
