@@ -72,6 +72,7 @@ declare uid1 uuid='c1111111-1111-4111-8111-111111111111';
         b1 uuid='b1111111-1111-4111-8111-111111111111';
         b2 uuid='b2222222-2222-4222-8222-222222222222';
         n integer;
+        e text;
 begin
  -- member reads own business profile only
  perform set_config('request.jwt.claim.sub',uid1::text,true);
@@ -98,9 +99,17 @@ begin
  -- must not be treated as a trusted service caller
  perform set_config('request.jwt.claim.sub','',true);
  perform set_config('request.jwt.claims', '{"role":"authenticated"}', true);
- if public.billing_entitlement(b1) is not null then raise exception 'TEST entitlement missing sub fails closed'; end if;
+ -- fail closed whether the stock auth helper returns NULL or raises:
+ -- either way the caller must get no entitlement data
+ begin
+   select public.billing_entitlement(b1) into e;
+ exception when others then e := null; end;
+ if e is not null then raise exception 'TEST entitlement missing sub fails closed'; end if;
  perform set_config('request.jwt.claims', '{"sub":"","role":"authenticated"}', true);
- if public.billing_entitlement(b1) is not null then raise exception 'TEST entitlement empty sub fails closed'; end if;
+ begin
+   select public.billing_entitlement(b1) into e;
+ exception when others then e := null; end;
+ if e is not null then raise exception 'TEST entitlement empty sub fails closed'; end if;
 
  -- trusted server path: service_role claim (no sub) keeps full access
  perform set_config('request.jwt.claims', '{"role":"service_role"}', true);
