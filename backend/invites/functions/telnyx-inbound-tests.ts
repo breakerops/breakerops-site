@@ -5,7 +5,7 @@
 // verifier). In-memory store with durable-state assertions and per-operation
 // fault injection. No live anything: no real texts, no prod, no provider.
 import { generateKeyPairSync, sign as edSign } from "node:crypto";
-import { createTelnyxInboundHandler } from "./telnyx-inbound.ts";
+import { createTelnyxInboundHandler, createTelnyxResumeWorker } from "./telnyx-inbound.ts";
 
 let passed = 0;
 function ok(cond: boolean, name: string) {
@@ -93,7 +93,7 @@ function makeTable(pk: string) {
   };
   return table;
 }
-function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: any[]; sendLatch?: Promise<void> } = {}) {
+function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: any[]; sendLatch?: Promise<void>; onGetConnection?: () => void } = {}) {
   const inbound = makeTable("event_id");
   const optouts = makeTable("phone");
   const sends: { payload: Record<string, string>; idemKey: string }[] = [];
@@ -149,7 +149,22 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
           lastAction: a.p_action, gen: (st ? st.gen : 0) + 1 });
         return { data: "claimed", error: null };
       }
-      if (fn === "get_connection") return { data: [{ api_key: "KEY-test", meta: { from_number: "+15550001111" } }], error: null };
+      if (fn === "inbound_claim_resume") {
+        // candidate v2 parity: eligibility = db_done + idem_key + payload + first_attempt_at within 23h;
+        // adoption keeps db_done, flips owner, bumps version (SKIP LOCKED is a no-op in the single-threaded stub)
+        const win = 23 * 60 * 60 * 1000;
+        const eligible = inbound.rows
+          .filter((r) => r.status === "db_done" && r.idem_key && r.payload && r.first_attempt_at
+            && Number.isFinite(Date.parse(r.first_attempt_at)) && Date.now() - Date.parse(r.first_attempt_at) < win)
+          .sort((a, b) => Date.parse(a.first_attempt_at) - Date.parse(b.first_attempt_at));
+        const row = eligible[0];
+        if (!row) return { data: [], error: null };
+        row.owner = a.p_worker; row.version += 1;
+        row.detail += " [resume-adopted by " + a.p_worker + " for same-key in-window resume]";
+        row.updated_at = new Date().toISOString();
+        return { data: [row], error: null };
+      }
+      if (fn === "get_connection") { opts.onGetConnection?.(); return { data: [{ api_key: "KEY-test", meta: { from_number: "+15550001111" } }], error: null }; }
       if (fn === "invite_redeem_on_inbound") return opts.rpcRedeem ?? { data: { status: "none" }, error: null };
       return { data: null, error: { message: "unknown rpc" } };
     },
@@ -169,7 +184,7 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
     await Promise.all(bgTasks.splice(0)); // ack-fast: response first, background flow completes after
     return r;
   };
-  return { h, rawH, bgTasks, inbound, optouts, sends, rpcCalls, rpcFaults, kwState };
+  return { h, rawH, bgTasks, inbound, optouts, sends, rpcCalls, rpcFaults, kwState, store, sendSms, sendEnv: { get: (k: string) => k === "TELNYX_SEND_ENABLED" ? "true" : undefined } as any };
 }
 const STOP = "STOP";
 
@@ -672,3 +687,84 @@ const STOP = "STOP";
 }
 
 console.log(`all ${passed} checks passed`);
+
+// 59: AF-2 - swept mid-intent: setIntent status guard keeps the sweep authoritative
+{
+  const w = makeWorld({ onGetConnection: () => {
+    const row = w2ref(w).inbound.rows.find((r: any) => r.event_id === evtId59);
+    if (row) { row.status = "uncertain"; row.detail += " [swept during stall]"; }
+  } });
+  const evtId59 = "evt-59";
+  const r = await w.h(signedReq({ ...evt(STOP), data: { ...evt(STOP).data, id: evtId59 } }));
+  const row = w.inbound.rows.find((r2: any) => r2.event_id === evtId59);
+  ok(r.status === 200 && row.status === "uncertain" && w.sends.length === 0 && !row.idem_key,
+    "AF-2: row swept to uncertain mid-stall is NOT resurrected by setIntent - stays uncertain, no intent written, no send");
+  function w2ref(x: any) { return x; }
+}
+
+// 60-64: durable resume worker
+async function seedParked(w: any, overrides: Record<string, any> = {}) {
+  w.inbound.rows.push({ event_id: "parked-1", event_type: "message.received", from_phone: "+15557654321",
+    status: "db_done", owner: "w-dead", version: 3, occurred_at: null, action: "optout", keyword: "STOP",
+    state_gen: 1, idem_key: "idem-original", payload: { from: "+15550001111", to: "+15557654321", text: "parked confirmation" },
+    first_attempt_at: new Date(Date.now() - 60_000).toISOString(),
+    detail: "parked confirmation", updated_at: new Date(Date.now() - 60_000).toISOString(), ...overrides });
+}
+{
+  // 60: happy path - worker adopts parked row, sends with ORIGINAL key+payload, row done
+  const w = makeWorld({ sendResults: [{ outcome: "sent", providerId: "msg_resume_1" }] });
+  await seedParked(w);
+  w.optouts.rows.push({ phone: "+15557654321", opted_out_at: new Date().toISOString(), keyword: "STOP" });
+  const worker = createTelnyxResumeWorker({ store: w.store, env: w.sendEnv, sendSms: w.sendSms });
+  const res = await worker("worker-1");
+  const row = w.inbound.rows.find((r: any) => r.event_id === "parked-1");
+  ok(res.adopted && res.outcome === "sent" && row.status === "done" && row.owner === "worker-1"
+    && w.sends.length === 1 && w.sends[0].idemKey === "idem-original" && w.sends[0].payload.text === "parked confirmation",
+    "worker: adopts parked db_done, sends with ORIGINAL idempotency key + payload, claim done");
+}
+{
+  // 61a: expired first_attempt (25h) is NOT even eligible - never adopted, sweeper owns it, no send
+  const w = makeWorld();
+  await seedParked(w, { first_attempt_at: new Date(Date.now() - 25 * 3600_000).toISOString() });
+  const worker = createTelnyxResumeWorker({ store: w.store, env: { get: () => undefined } as any });
+  const res = await worker("worker-2");
+  const row = w.inbound.rows.find((r: any) => r.event_id === "parked-1");
+  ok(!res.adopted && row.status === "db_done" && w.sends.length === 0,
+    "worker: 25h-parked row is not resume-eligible - left for the sweeper/desk, no blind resend");
+  // 61b: FUTURE first_attempt (clock skew) passes eligibility but fails window sanity -> window_held, uncertain
+  const w2 = makeWorld();
+  await seedParked(w2, { first_attempt_at: new Date(Date.now() + 3600_000).toISOString() });
+  const worker2 = createTelnyxResumeWorker({ store: w2.store, env: { get: () => undefined } as any });
+  const res2 = await worker2("worker-2b");
+  const row2 = w2.inbound.rows.find((r: any) => r.event_id === "parked-1");
+  ok(res2.adopted && res2.outcome === "window_held" && row2.status === "uncertain" && w2.sends.length === 0,
+    "worker: future first_attempt parks to uncertain for the desk - no blind resend");
+}
+{
+  // 62: contradiction - suppression gone (newer START applied since parking) -> superseded, stale_event, no send
+  const w = makeWorld();
+  await seedParked(w); // optout intent but NO suppression row present
+  const worker = createTelnyxResumeWorker({ store: w.store, env: { get: () => undefined } as any });
+  const res = await worker("worker-3");
+  const row = w.inbound.rows.find((r: any) => r.event_id === "parked-1");
+  ok(res.adopted && res.outcome === "superseded" && row.status === "stale_event" && w.sends.length === 0,
+    "worker: pre-send contradiction re-check stops a contradicting confirmation");
+}
+{
+  // 63: nothing eligible -> adopted:false, zero writes
+  const w = makeWorld();
+  const worker = createTelnyxResumeWorker({ store: w.store, env: { get: () => undefined } as any });
+  const res = await worker("worker-4");
+  ok(!res.adopted && w.inbound.rows.length === 0 && w.sends.length === 0, "worker: no eligible rows -> idle, no writes");
+}
+{
+  // 64: provider 429 on resumed send -> claim back to db_done with same key (retryable, not lost)
+  const w = makeWorld({ sendResults: [{ outcome: "retryable", error: "429" }] });
+  await seedParked(w);
+  w.optouts.rows.push({ phone: "+15557654321", opted_out_at: new Date().toISOString(), keyword: "STOP" });
+  const worker = createTelnyxResumeWorker({ store: w.store, env: w.sendEnv, sendSms: w.sendSms });
+  const res = await worker("worker-5");
+  const row = w.inbound.rows.find((r: any) => r.event_id === "parked-1");
+  ok(res.adopted && res.outcome === "retryable" && row.status === "db_done" && row.idem_key === "idem-original",
+    "worker: 429 returns claim to db_done with original key - resumable, not uncertain");
+}
