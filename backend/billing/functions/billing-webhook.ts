@@ -12,14 +12,13 @@
 //                                  enabled without the token configured is a
 //                                  misconfiguration -> 503, not open access.
 //                                  Wrong/missing token -> 401, never logged.
-// Payload minimization: by default only a minimal envelope (provider, event
-// id, event type, livemode, created, business_id) is stored - never the raw
-// financial payload. Full-body storage exists behind BILLING_STORE_RAW_PAYLOAD=1
-// for local debugging ONLY; that opt-in is NOT APPROVED for any deployed
-// environment and must stay unset outside local tests.
-// Parser note: v1 signatures are compared byte-exact as sent; Stripe sends
-// canonical lowercase hex. A sender deviating (uppercase hex, odd spacing)
-// fails closed - intentional, no canonicalization churn.
+// Payload minimization: only a minimal envelope (provider, event id, event
+// type, livemode, created, business_id) is stored - never the raw financial
+// payload. There is NO raw-persistence mode in this candidate: debug
+// fixtures inspect in-memory state instead of persisting payloads.
+// Parser note: header values are trimmed of surrounding whitespace, then
+// compared byte-exact against the expected lowercase hex (Stripe's canonical
+// form). Other encodings (e.g. uppercase hex) fail closed.
 // Idempotency: provider+provider_event_id pre-check, plus a 23505 arm. The
 // pre-check alone is racy; this handler DEPENDS on the unique-index migration
 // candidate (dedupe, sha256 3cc426b2...) being applied before it is treated
@@ -104,7 +103,6 @@ async function logEvent(
 export function createBillingWebhookHandler(deps: { store: BillingWebhookStore; env: BillingWebhookEnv }) {
   const { store, env } = deps;
   return async function handle(req: Request): Promise<Response> {
-    const storeRaw = env.get("BILLING_STORE_RAW_PAYLOAD") === "1";
     const secret = env.get("STRIPE_WEBHOOK_SECRET");
 
     if (secret) {
@@ -132,9 +130,7 @@ export function createBillingWebhookHandler(deps: { store: BillingWebhookStore; 
       const rawBiz = obj?.metadata?.business_id;
       const businessId = typeof rawBiz === "string" && UUID_RE.test(rawBiz) ? rawBiz : null;
       const bizUnresolved = businessId === null && rawBiz != null;
-      const payload = storeRaw
-        ? body
-        : { id: body.id ?? null, type: body.type, livemode: body.livemode ?? null, created: body.created ?? null,
+      const payload = { id: body.id ?? null, type: body.type, livemode: body.livemode ?? null, created: body.created ?? null,
             ...(bizUnresolved ? { business_id_unresolved: true } : {}) };
       const r = await logEvent(store, businessId, "stripe", (body.id as string) ?? null, body.type, payload);
       if (r.error) return Response.json({ ok: false, error: "event storage failed" }, { status: 500 });
@@ -162,7 +158,7 @@ export function createBillingWebhookHandler(deps: { store: BillingWebhookStore; 
     if (!body || typeof body.type !== "string") {
       return Response.json({ ok: false, error: "expected {type, business_id?}" }, { status: 400 });
     }
-    const payload = storeRaw ? body : { id: body.id ?? null, type: body.type };
+    const payload = { id: body.id ?? null, type: body.type };
     const r = await logEvent(store, body.business_id ?? null, "placeholder", body.id ?? null, body.type, payload);
     if (r.error) return Response.json({ ok: false, error: "event storage failed" }, { status: 500 });
     return Response.json({ ok: true, placeholder: true, duplicate: r.duplicate, note: "logged only; no state changed" });
