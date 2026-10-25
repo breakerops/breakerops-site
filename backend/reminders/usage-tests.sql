@@ -90,6 +90,15 @@ begin
  select texts into n from public.usage_monthly where business_id=b1 and month='2026-10-01';
  if n<>2 then raise exception 'TEST t7 not bucketed local month'; end if;
 
+ -- T10 (CURRENT BEHAVIOR, unapproved billing basis): if a receipt later
+ -- flips a 'sent' row to 'failed' (carrier corrects a delivery), the
+ -- counted text is NOT decremented. Whether delivered-then-failed texts
+ -- bill is an open semantics question; this documents what happens now.
+ update public.reminders set status='failed', error='late carrier correction' where id=r2;
+ select texts into n from public.usage_monthly
+   where business_id=b1 and month=date_trunc('month',now())::date;
+ if n<>2 then raise exception 'TEST t10 sent-to-failed no decrement current behavior'; end if;
+
  -- T8 (COVERAGE GAP, documented as current behavior): the trigger is
  -- AFTER UPDATE only. A row INSERTed already 'sent' (no code path does
  -- this today) is NOT counted. If a future send path ever inserts
@@ -110,8 +119,13 @@ do $$
 declare got int;
 begin
  if current_role<>'authenticated' then raise exception 'TEST role switch binding'; end if;
- -- no RLS policies on usage_monthly: authenticated reads zero rows
- select count(*) into got from public.usage_monthly;
+ -- usage data must come back EMPTY for the authenticated role, whether the
+ -- closed layer is the privilege system (stock PG + current live ACLs:
+ -- insufficient_privilege) or RLS (Supabase default SELECT grant + zero
+ -- policies: zero rows). Both shapes are fail-closed; neither may leak.
+ begin
+   select count(*) into got from public.usage_monthly;
+ exception when insufficient_privilege then got := 0; end;
  if got<>0 then raise exception 'TEST usage rls read closed'; end if;
  -- no grant on the view: authenticated cannot read v_usage_billing
  begin
