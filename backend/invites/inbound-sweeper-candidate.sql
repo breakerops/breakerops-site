@@ -1,7 +1,25 @@
--- INBOUND SWEEPER CANDIDATE v3 (REVIEW ONLY - NO APPLY AUTHORIZED)
+-- INBOUND SWEEPER CANDIDATE v4 (REVIEW ONLY - NO APPLY AUTHORIZED)
 -- Reconciliation half of the sweeper gap: finds claims left in
--- processing/sending past OUR recovery/lease threshold and moves them to
--- 'uncertain' for desk triage.
+-- processing/sending/db_done past OUR recovery/lease threshold and moves
+-- them to 'uncertain' for desk triage.
+--
+-- db_done COVERAGE (AF-1): under ack-fast, a 429 post-ack or a death after
+-- intent-before-send-turn parks the claim at db_done with its idempotency
+-- key and payload. Nothing re-drives it - the pre-ack-fast 500/provider
+-- redelivery loop is gone by design. These rows are surfaced as desk
+-- triage, NOT blindly resent: the persisted intent+key make a same-key
+-- in-window resume SAFE (the handler's resume discipline: 23h window,
+-- original key+payload, pre-send contradiction re-check), but no durable
+-- worker exists yet to perform it. When one lands, in-window db_done rows
+-- become resumable through that exact path; until then they are desk items.
+--
+-- WORKER/SWEEPER CONCURRENCY: same stage map as the send race. A worker
+-- adopting a db_done row keeps status db_done until its send-turn CAS; a
+-- sweep landing before that CAS flips the row to 'uncertain' and the
+-- worker's send-turn CAS fails - no send (Stage A equivalent). A sweep
+-- after the send-turn is Stage B/C. The CAS predicate (event_id + status)
+-- is re-evaluated by PG on the latest row version, so a concurrent status
+-- transition skips the row.
 --
 -- WHAT THE THRESHOLD IS: our own recovery/lease choice - how long a claim
 -- may sit untouched before triage. It is NOT a measured provider
@@ -40,12 +58,14 @@ begin
     with old as (
       select e.event_id, e.status
         from public.inbound_events e
-       where e.status in ('processing','sending')
+       where e.status in ('processing','sending','db_done')
          and e.updated_at < p_stale_before
     )
     update public.inbound_events t
        set status = 'uncertain',
-           detail = t.detail || ' [swept: exceeded our recovery/lease threshold; desk reconcile per stage A/B/C]',
+           detail = t.detail || case when t.status = 'db_done'
+                  then ' [swept: parked post-ack (429 or crash after intent); same-key in-window resume is safe per the replay discipline but NO worker exists yet - desk reconcile]'
+                  else ' [swept: exceeded our recovery/lease threshold; desk reconcile per stage A/B/C]' end,
            updated_at = now()
       from old
      where t.event_id = old.event_id
