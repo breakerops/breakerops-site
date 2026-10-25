@@ -23,8 +23,11 @@ commit;
 -- modify any row. The unique index build will fail on duplicates, which is
 -- the intended fail-closed behavior. Null provider_event_id rows are fine
 -- (the index treats nulls as distinct) but are counted for awareness.
--- APPLY: run the create index concurrently statement alone, then re-run the
--- preflight to confirm zero duplicates and verify the index exists:
+-- APPLY: run this candidate's transactional block alone (plain CREATE INDEX
+-- inside begin/commit - NOT CONCURRENTLY, which cannot run in a transaction).
+-- Acceptable only while the ledger is small; if billing_events has grown
+-- large before apply, STOP and ask for a CONCURRENTLY variant run outside a
+-- transaction instead. Then re-run the preflight and verify the index exists:
 --   select indexname from pg_indexes where tablename='billing_events';
 -- No assumption is made that production is empty; no deletion is ever part
 -- of this candidate.
