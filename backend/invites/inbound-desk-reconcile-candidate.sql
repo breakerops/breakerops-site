@@ -6,15 +6,22 @@
 -- mechanism, NOT an operated desk workflow, and it is not authorized for
 -- any real reconciliation or opt-in change.
 --
--- Binding and freshness (v2):
---  * The resolution must match the claim's RECORDED action (persisted by
---    the claim RPC v3.7): 'apply_optin' requires action='optin'. A held
---    row without a recorded optin action is not resolvable as an opt-in.
---  * NEWER-KEYWORD GUARD: if the phone's keyword state points at a newer
---    event than this claim, resolution is REFUSED - a newer STOP/START
---    arrived after the held event, so acting on the stale claim could
---    undo it. Resolve the newest event first (re-verify), then this one
---    becomes the newest and resolves normally.
+-- Binding and freshness (v3, per independent review D1/D2/D3):
+--  * 'apply_optin' ONLY on status='held' claims with recorded
+--    action='optin' (persisted by the claim RPC v3.7). An 'uncertain'
+--    claim - including a STOP confirmation with an unknown send outcome -
+--    can NEVER flip suppression here; uncertain means verify-by-idem-key,
+--    and non-keyword swept rows have action NULL and are refused.
+--  * GENERATION GUARD (event chain, not timestamps): apply_optin requires
+--    that NO keyword event applied after this claim was recorded. The claim
+--    RPC stamps every claim with the state generation it saw under the row
+--    lock and increments that generation on every apply, so the check is a
+--    single integer compare - no mutable updated_at, no cross-clock
+--    comparison, and the provider-timestamp anchor stays in its own clock
+--    domain. If anything applied after the held claim (even already
+--    terminal), the customer's newer word stands: REFUSED; the customer
+--    re-texting creates a new event to resolve. Claims predating the
+--    generation column (state_gen NULL) are refused - safe side.
 --  * CAS on held/uncertain; note required; audit appended; NEVER sends a
 --    text (a desk-applied opt-in triggers no confirmation - separate
 --    reviewed flow). 'keep_suppressed' changes no customer-visible state.
@@ -36,25 +43,17 @@ begin
   if v_claim.status not in ('held','uncertain') then return 'not_resolvable'; end if;
 
   if p_resolution = 'apply_optin' then
-    -- binding: the claim must be a recorded optin for this phone
-    if v_claim.action is distinct from 'optin' or v_claim.from_phone is null then
+    -- binding: held claims only, recorded optin only, phone present
+    if v_claim.status is distinct from 'held'
+       or v_claim.action is distinct from 'optin'
+       or v_claim.from_phone is null then
       return 'not_resolvable';
     end if;
-    -- freshness: refuse if a newer keyword event exists for this phone
-    -- AND is itself unresolved. A newer event already terminal (done /
-    -- failed / stale_event) is visible history, not a blocker: the desk
-    -- can see exactly what it did. An unresolved newer event must be
-    -- resolved first, newest-first, so nothing stale silently wins.
+    -- generation guard: refuse if anything applied after this claim
+    if v_claim.state_gen is null then return 'newer_keyword_exists'; end if;
     select * into v_state from public.sms_keyword_state where phone = v_claim.from_phone;
-    if found and v_state.last_event_id is distinct from p_event_id then
-      declare v_newest_status text;
-      begin
-        select status into v_newest_status from public.inbound_events
-         where event_id = v_state.last_event_id;
-        if v_newest_status is null or v_newest_status in ('held','uncertain','processing','sending','db_done') then
-          return 'newer_keyword_exists';
-        end if;
-      end;
+    if found and v_state.gen is distinct from v_claim.state_gen then
+      return 'newer_keyword_exists';
     end if;
     delete from public.sms_opt_outs where phone = v_claim.from_phone;
     update public.sms_keyword_state
