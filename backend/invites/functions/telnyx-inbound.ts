@@ -179,8 +179,17 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
   // ack (developers.telnyx.com/docs/messaging/messages/receiving-webhooks).
   // Provider retries stop mattering once the claim is durable: post-claim
   // failures live on the claim row and are recovered by the sweeper/desk,
-  // not by asking the provider to redeliver. Without a scheduler primitive
-  // the work runs inline (correctness preserved, latency not).
+  // not by asking the provider to redeliver.
+  // QUALIFICATIONS (kept explicit):
+  //  * waitUntil is NOT a durable queue: if the process dies after the ack
+  //    (or the scheduler drops the task), the flow never runs. Recovery
+  //    state IS discoverable - the claim row sits in
+  //    processing/db_done/sending and the sweeper moves it to 'uncertain'
+  //    for the desk - but a dropped confirmation is a DESK item, not an
+  //    automatic retry.
+  //  * The inline fallback (no scheduler primitive) preserves correctness
+  //    but does NOT satisfy the 2-second ack contract; on edge, waitUntil
+  //    is required for the contract to hold.
   const bg: ((p: Promise<unknown>) => void) | undefined =
     deps.bg ?? (((globalThis as any).EdgeRuntime?.waitUntil)
       ? (p) => (globalThis as any).EdgeRuntime.waitUntil(p)
