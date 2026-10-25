@@ -26,8 +26,8 @@ function signedReq(bodyObj: unknown, opts: { ts?: number; badSig?: boolean } = {
     headers: { "telnyx-signature-ed25519": sig, "telnyx-timestamp": String(ts) },
   });
 }
-const evt = (text: string, id = "evt-1", from = "+15551234567") =>
-  ({ data: { id, event_type: "message.received", payload: { from: { phone_number: from }, text } } });
+const evt = (text: string, id = "evt-1", from = "+15551234567", occurred_at?: string) =>
+  ({ data: { id, event_type: "message.received", ...(occurred_at ? { occurred_at } : {}), payload: { from: { phone_number: from }, text } } });
 
 // --- in-memory store ---
 type Row = Record<string, any>;
@@ -100,15 +100,28 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
   const sendQueue = [...(opts.sendResults ?? [])];
   const rpcCalls: { fn: string; args: any }[] = [];
   const rpcFaults = { claim_keyword: 0 };
+  const kwState = new Map<string, { lastOccurredAt: number | null; unknownHorizon: number | null; lastAction: string }>();
   const store = {
     from: (t: string) => (t === "inbound_events" ? inbound : optouts),
     rpc: async (fn: string, a: any) => {
       if (fn === "inbound_claim_keyword") {
         rpcCalls.push({ fn, args: a });
         if (rpcFaults.claim_keyword-- > 0) return { data: null, error: { message: "tx aborted" } }; // crash: NOTHING lands
+        // v3.2 semantics: occurred_at guard with per-phone state + unknown flag
+        const occurred = a.p_occurred_at ? Date.parse(a.p_occurred_at) : NaN;
+        const occ = Number.isFinite(occurred) ? occurred : null;
+        let st = kwState.get(a.p_from_phone);
+        let claimStatus = "processing";
+        if (st && st.lastOccurredAt !== null && occ !== null && occ < st.lastOccurredAt) claimStatus = "stale_event";
+        else if (a.p_action === "optin" && (occ === null
+          || (st && st.unknownHorizon !== null && occ < st.unknownHorizon)
+          || (st && st.lastOccurredAt !== null && occ === st.lastOccurredAt))) claimStatus = "held";
         if (inbound.rows.some((r) => r.event_id === a.p_event_id)) return { data: "duplicate", error: null };
         inbound.rows.push({ event_id: a.p_event_id, event_type: a.p_event_type, from_phone: a.p_from_phone,
-          status: "processing", owner: a.p_owner, version: 1, updated_at: new Date().toISOString() });
+          status: claimStatus, owner: a.p_owner, version: 1, occurred_at: occ ? new Date(occ).toISOString() : null,
+          updated_at: new Date().toISOString() });
+        if (claimStatus === "stale_event") return { data: "stale", error: null };
+        if (claimStatus === "held") return { data: "held", error: null };
         if (a.p_action === "optout") {
           const i = optouts.rows.findIndex((r) => r.phone === a.p_from_phone);
           const row = { phone: a.p_from_phone, opted_out_at: new Date().toISOString(), keyword: a.p_keyword };
@@ -116,6 +129,12 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         } else {
           for (let i = optouts.rows.length - 1; i >= 0; i--) if (optouts.rows[i].phone === a.p_from_phone) optouts.rows.splice(i, 1);
         }
+        kwState.set(a.p_from_phone, {
+          lastOccurredAt: occ ?? (st ? st.lastOccurredAt : null),
+          unknownHorizon: a.p_action === "optin" ? null
+            : occ === null ? Math.max(st?.unknownHorizon ?? -Infinity, Date.now())
+            : (st ? st.unknownHorizon : null),
+          lastAction: a.p_action });
         return { data: "claimed", error: null };
       }
       if (fn === "get_connection") return { data: [{ api_key: "KEY-test", meta: { from_number: "+15550001111" } }], error: null };
@@ -209,8 +228,10 @@ const STOP = "STOP";
 }
 // 8: crash-after-intent: redelivery adopts db_done and retries ONLY the send with same key
 {
-  const { h, inbound, sends } = makeWorld({ sendGate: false });
+  const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
   const key = "11111111-1111-4111-8111-111111111111";
+  const { optouts: oo8 } = { optouts };
+  optouts.rows.push({ phone: "+15551234567", opted_out_at: new Date().toISOString(), keyword: "STOP" }); // atomic RPC would have written this at claim
   inbound.rows.push({ event_id: "evt-8", event_type: "message.received", from_phone: "+15551234567",
     status: "db_done", detail: "BreakerOps: You are unsubscribed and will receive no more texts. Reply START to resubscribe.",
     owner: "crashed", version: 1, idem_key: key,
@@ -227,8 +248,9 @@ const STOP = "STOP";
 }
 // 9: stale 'sending' inside window -> adopt + resume same key
 {
-  const { h, inbound, sends } = makeWorld({ sendGate: false });
+  const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
   const key = "22222222-2222-4222-8222-222222222222";
+  optouts.rows.push({ phone: "+15551234567", opted_out_at: new Date().toISOString(), keyword: "STOP" }); // atomic RPC would have written this at claim
   inbound.rows.push({ event_id: "evt-9", event_type: "message.received", from_phone: "+15551234567",
     status: "sending", detail: "resume me", owner: "crashed", version: 1, idem_key: key,
     payload: { from: "+15550001111", to: "+15551234567", text: "resume me" },
@@ -321,7 +343,7 @@ const STOP = "STOP";
 {
   const { h, optouts, sends } = makeWorld({ sendGate: false });
   optouts.rows.push({ phone: "+15551234567", opted_out_at: new Date().toISOString(), keyword: "STOP" });
-  const r = await h(signedReq(evt("START", "evt-18")));
+  const r = await h(signedReq(evt("START", "evt-18", "+15551234567", "2026-10-25T04:00:10Z")));
   const j = await r.json();
   ok(j.status === "opted_in" && optouts.rows.length === 0 && sends.length === 1,
     "START: suppression removed + verified, resubscribe confirmation sent");
@@ -379,13 +401,13 @@ const STOP = "STOP";
   const j2 = await r2.json();
   ok(j2.deduped === true && sends.length === 1, "RPC duplicate: deduped ack, no resend");
 }
-// 29: STOP redelivery after a later START does NOT resurrect suppression (RPC duplicate path)
+// 29: STOP redelivery after a NEWER START does NOT resurrect suppression (stale path)
 {
   const { h, optouts } = makeWorld({ sendGate: false });
-  await h(signedReq(evt(STOP, "evt-29stop")));
-  await h(signedReq(evt("START", "evt-29start")));
-  await h(signedReq(evt(STOP, "evt-29stop"))); // redelivery of the OLD stop
-  ok(optouts.rows.length === 0, "old STOP redelivery after START: suppression stays removed");
+  await h(signedReq(evt(STOP, "evt-29stop", "+15551234567", "2026-10-25T04:00:01Z")));
+  await h(signedReq(evt("START", "evt-29start", "+15551234567", "2026-10-25T04:00:02Z"))); // newer START applies
+  await h(signedReq(evt(STOP, "evt-29stop", "+15551234567", "2026-10-25T04:00:01Z"))); // redelivery of the OLD stop
+  ok(optouts.rows.length === 0, "old STOP redelivery after newer START: suppression stays removed");
 }
 // 30: malformed RPC result fails closed
 {
@@ -395,6 +417,132 @@ const STOP = "STOP";
   const h2 = createTelnyxInboundHandler({ store: store2, env: { get: (k: string) => k === "TELNYX_WEBHOOK_PUBLIC_KEY" ? pubB64 : undefined }, sendSms: async () => { throw new Error("no send"); } });
   const r = await h2(signedReq(evt(STOP, "evt-30")));
   ok(r.status === 500, "malformed claim RPC result -> fail closed 500");
+}
+
+
+// 31: occurred_at is passed to the RPC and recorded on the claim
+{
+  const { h, inbound, rpcCalls } = makeWorld({ sendGate: false });
+  await h(signedReq(evt(STOP, "evt-31", "+15551234567", "2026-10-25T04:00:00Z")));
+  const c = rpcCalls.find((c) => c.fn === "inbound_claim_keyword");
+  ok(c?.args.p_occurred_at === "2026-10-25T04:00:00Z" && inbound.rows[0].occurred_at === "2026-10-25T04:00:00.000Z",
+    "occurred_at passed to RPC and persisted on the claim");
+}
+// 32: stale keyword event -> 200 deduped-held, suppression untouched, no send
+{
+  const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
+  await h(signedReq(evt(STOP, "evt-32a", "+15551234567", "2026-10-25T04:00:05Z")));
+  const r = await h(signedReq(evt(STOP, "evt-32b", "+15551234567", "2026-10-25T04:00:01Z"))); // older STOP
+  const j = await r.json();
+  ok(j.deduped === true && inbound.rows.find((r) => r.event_id === "evt-32b").status === "stale_event" &&
+     sends.length === 1 && optouts.rows.length === 1, "stale event: terminal, no second send, suppression untouched");
+}
+// 33: dangerous inversion through the ACTUAL handler: STOP(t2) then older START(t1)
+{
+  const { h, optouts, sends } = makeWorld({ sendGate: false });
+  await h(signedReq(evt(STOP, "evt-33a", "+15551234567", "2026-10-25T04:00:02Z")));
+  const r = await h(signedReq(evt("START", "evt-33b", "+15551234567", "2026-10-25T04:00:01Z"))); // older, arrives late
+  const j = await r.json();
+  ok(j.deduped === true && optouts.rows.length === 1 && sends.length === 1 &&
+     !sends.some((s) => s.payload.text.includes("resubscribed")),
+    "INVERSION BLOCKED: late older START cannot re-enable texts or send a resubscribe confirmation");
+}
+// 34: ambiguous START (no occurred_at) -> held, suppression preserved, no confirmation
+{
+  const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
+  await h(signedReq(evt(STOP, "evt-34a", "+15551234567", "2026-10-25T04:00:02Z")));
+  sends.length = 0;
+  const r = await h(signedReq(evt("START", "evt-34b"))); // no occurred_at
+  const j = await r.json();
+  const claim = inbound.rows.find((r) => r.event_id === "evt-34b");
+  ok(j.held && claim.status === "held" && optouts.rows.length === 1 && sends.length === 0,
+    "ambiguous START held: suppression preserved, no confirmation sent");
+}
+// 35: ambiguous STOP (no occurred_at) still applies (safe side)
+{
+  const { h, optouts } = makeWorld({ sendGate: false });
+  const r = await h(signedReq(evt(STOP, "evt-35")));
+  const j = await r.json();
+  ok(j.status === "opted_out" && optouts.rows.length === 1, "unknown-ts STOP applies on the safe side");
+}
+// 36: unknown-ts STOP then timestamped START newer than the old anchor -> HELD (main's hole)
+{
+  const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
+  await h(signedReq(evt(STOP, "evt-36a", "+15551234567", "2026-10-25T04:00:00Z")));
+  await h(signedReq(evt("START", "evt-36b", "+15551234567", "2026-10-25T04:00:05Z"))); // applies, anchor t5
+  await h(signedReq(evt(STOP, "evt-36c")));                                            // unknown ts, applies, flag set
+  const r = await h(signedReq(evt("START", "evt-36d", "+15551234567", "2026-10-25T04:00:06Z"))); // >anchor, maybe <STOP
+  const claim = inbound.rows.find((r) => r.event_id === "evt-36d");
+  ok(claim.status === "held" && optouts.rows.length === 1,
+    "unknown-ts STOP blocks all later STARTs until re-anchored: no ambiguous resubscribe");
+}
+// 37: in-flight contradiction - STOP confirmation intent persisted, but a newer START already committed
+{
+  const { h, inbound, sends } = makeWorld({ sendGate: false });
+  inbound.rows.push({ event_id: "evt-37", event_type: "message.received", from_phone: "+15551234567",
+    status: "db_done", detail: "BreakerOps: You are unsubscribed and will receive no more texts. Reply START to resubscribe.",
+    owner: "crashed", version: 1, idem_key: "44444444-4444-4444-8444-444444444444",
+    payload: { from: "+15550001111", to: "+15551234567", text: "BreakerOps: You are unsubscribed and will receive no more texts. Reply START to resubscribe." },
+    first_attempt_at: new Date().toISOString(), updated_at: new Date(Date.now() - 180_000).toISOString() });
+  // note: no opt-outs row - a newer START already removed it
+  const r = await h(signedReq(evt(STOP, "evt-37")));
+  const j = await r.json();
+  ok(j.deduped === true && sends.length === 0 && inbound.rows[0].status === "stale_event",
+    "in-flight contradiction: unsubscribed text NOT sent when a newer START already committed");
+}
+// 38: reverse contradiction - START confirmation intent persisted, but a newer STOP re-suppressed
+{
+  const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
+  optouts.rows.push({ phone: "+15551234567", opted_out_at: new Date().toISOString(), keyword: "STOP" });
+  inbound.rows.push({ event_id: "evt-38", event_type: "message.received", from_phone: "+15551234567",
+    status: "db_done", detail: "BreakerOps: You are resubscribed to texts. Reply STOP to opt out, HELP for help. Msg&data rates may apply.",
+    owner: "crashed", version: 1, idem_key: "55555555-5555-4555-8555-555555555555",
+    payload: { from: "+15550001111", to: "+15551234567", text: "BreakerOps: You are resubscribed to texts. Reply STOP to opt out, HELP for help. Msg&data rates may apply." },
+    first_attempt_at: new Date().toISOString(), updated_at: new Date(Date.now() - 180_000).toISOString() });
+  const r = await h(signedReq(evt("START", "evt-38")));
+  const j = await r.json();
+  ok(j.deduped === true && sends.length === 0 && inbound.rows[0].status === "stale_event",
+    "in-flight contradiction: resubscribed text NOT sent when a newer STOP already committed");
+}
+// 39: redelivery of stale_event / held claims -> deduped ack, no resend
+{
+  const { h, inbound, sends } = makeWorld({ sendGate: false });
+  inbound.rows.push({ event_id: "evt-39a", status: "stale_event", owner: "old", version: 2, updated_at: new Date().toISOString() });
+  inbound.rows.push({ event_id: "evt-39b", status: "held", owner: "old", version: 2, updated_at: new Date().toISOString() });
+  const r1 = await h(signedReq(evt(STOP, "evt-39a")));
+  const r2 = await h(signedReq(evt("START", "evt-39b")));
+  const j1 = await r1.json(); const j2 = await r2.json();
+  ok(j1.deduped === true && j2.deduped === true && sends.length === 0, "stale/held redeliveries: terminal acks, no resend");
+}
+// 40: equal timestamps both orders resolve to suppressed
+{
+  const w1 = makeWorld({ sendGate: false });
+  await w1.h(signedReq(evt(STOP, "e1", "+15551234567", "2026-10-25T05:00:00Z")));
+  const r1 = await w1.h(signedReq(evt("START", "e2", "+15551234567", "2026-10-25T05:00:00Z")));
+  const w2 = makeWorld({ sendGate: false });
+  await w2.h(signedReq(evt("START", "e3", "+15551234567", "2026-10-25T05:00:00Z")));
+  await w2.h(signedReq(evt(STOP, "e4", "+15551234567", "2026-10-25T05:00:00Z")));
+  ok(w1.optouts.rows.length === 1 && w2.optouts.rows.length === 1,
+    "equal-ts STOP/START: suppressed in both processing orders (safe side)");
+  const j1 = await r1.json();
+  ok(j1.deduped === true, "equal-ts START held, not applied");
+}
+
+
+// 41: horizon precision - unknown-ts STOP, then a START provably newer than its received time APPLIES
+{
+  const { h, inbound, optouts, sends } = makeWorld({ sendGate: false });
+  await h(signedReq(evt(STOP, "evt-41a"))); // unknown ts -> applies, horizon = its received time (now)
+  sends.length = 0;
+  const future = new Date(Date.now() + 3600_000).toISOString();
+  const r = await h(signedReq(evt("START", "evt-41b", "+15551234567", future)));
+  const j = await r.json();
+  ok(j.status === "opted_in" && optouts.rows.length === 0 && sends.length === 1,
+    "START provably newer than the unknown-STOP horizon applies (no over-blocking)");
+  // and an older-than-horizon START is held
+  const r2 = await h(signedReq(evt("START", "evt-41c", "+15551234567", "2026-10-25T04:00:00Z")));
+  const claim2 = inbound.rows.find((r) => r.event_id === "evt-41c");
+  ok(claim2.status === "stale_event" || claim2.status === "held", "older START after re-anchor is still blocked");
 }
 
 console.log(`all ${passed} checks passed`);
