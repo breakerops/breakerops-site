@@ -162,4 +162,54 @@ const req = (body: string, headers: Record<string, string>) =>
     "concurrent redelivery: one insert wins, loser armed as duplicate, both 200");
 }
 
+
+// 24: well-formed but UNKNOWN business_id -> FK arm logs unassigned+flagged, 200, no 500
+{
+  const rows: Row[] = [];
+  const store = {
+    from: (_t: string) => ({
+      select: (_c: string) => ({ eq: (_a: string, _b: string) => ({ eq: (_c2: string, _d: string) => ({ limit: async (_n: number) => ({ data: [] }) }) }) }),
+      insert: async (row: Row) => {
+        if (row.business_id) return { error: { code: "23503", message: "insert or update on table violates foreign key constraint" } };
+        rows.push(row); return { error: null };
+      },
+    }),
+  };
+  const env = { get: (k: string) => (k === "STRIPE_WEBHOOK_SECRET" ? SECRET : undefined) };
+  const h = createBillingWebhookHandler({ store, env });
+  const b = JSON.stringify({ id: "evt_fk", type: "invoice.paid", data: { object: { metadata: { business_id: "11111111-2222-3333-4444-555555555555" } } } });
+  const r = await h(req(b, { "Stripe-Signature": hdr(NOW, b) }));
+  const j = await r.json();
+  ok(r.status === 200 && j.ok === true && rows.length === 1 && rows[0].business_id === null &&
+     JSON.stringify(rows[0].payload).includes("business_id_unresolved"),
+    "unknown business_id: logged unassigned + flagged, no untrusted-FK 500");
+}
+// 25: non-UUID business_id metadata is dropped before any DB write; errors are generic
+{
+  const { store, rows } = makeStore();
+  const env = { get: (k: string) => (k === "STRIPE_WEBHOOK_SECRET" ? SECRET : undefined) };
+  const h = createBillingWebhookHandler({ store, env });
+  const b = JSON.stringify({ id: "evt_shape", type: "invoice.paid", data: { object: { metadata: { business_id: "not-a-uuid; drop table" } } } });
+  const r = await h(req(b, { "Stripe-Signature": hdr(NOW, b) }));
+  ok(r.status === 200 && rows.length === 1 && rows[0].business_id === null &&
+     JSON.stringify(rows[0].payload).includes("business_id_unresolved"),
+    "non-UUID business_id dropped, flagged, logged");
+}
+// 26: storage failure returns generic error, never raw DB text
+{
+  const store = {
+    from: (_t: string) => ({
+      select: (_c: string) => ({ eq: (_a: string, _b: string) => ({ eq: (_c2: string, _d: string) => ({ limit: async (_n: number) => ({ data: [] }) }) }) }),
+      insert: async (_row: Row) => ({ error: { code: "XX000", message: "connection to server at \"10.0.0.5\", port 5432 failed: FATAL: password authentication failed" } }),
+    }),
+  };
+  const env = { get: (k: string) => (k === "STRIPE_WEBHOOK_SECRET" ? SECRET : undefined) };
+  const h = createBillingWebhookHandler({ store, env });
+  const b = JSON.stringify({ id: "evt_err", type: "invoice.paid", data: { object: {} } });
+  const r = await h(req(b, { "Stripe-Signature": hdr(NOW, b) }));
+  const j = await r.json();
+  ok(r.status === 500 && j.error === "event storage failed" && !JSON.stringify(j).includes("10.0.0.5"),
+    "storage failure: generic 500, no raw DB error echo");
+}
+
 console.log(`all ${passed} checks passed`);
