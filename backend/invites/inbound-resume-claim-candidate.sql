@@ -15,6 +15,18 @@
 --   first_attempt_at within the resume window (default 23h, provider replay
 --   horizon minus margin)        - outside it, resume is unsafe and the row
 --                                  belongs to the sweeper's uncertain triage
+--   next_attempt_at IS NULL or <= now()
+--                                - EXPLICIT PER-CLAIM retry pacing: the
+--                                  send-turn's 429 rollback stamps the next
+--                                  eligible moment; this claim is never
+--                                  re-driven before it. NULL means no rate-
+--                                  limited attempt yet, so crash-before-first-
+--                                  send rows resume immediately (no provider
+--                                  contact is being paced - only SEND attempts
+--                                  are). The replay window (first_attempt_at)
+--                                  NEVER resets. NARROW GUARANTEE: this paces
+--                                  sends PER CLAIM; it is not provider-wide
+--                                  rate protection across claims.
 --
 -- Concurrency: FOR UPDATE SKIP LOCKED takes the row lock at select time; the
 --   status re-check on the update is belt-and-braces over that lock, so
@@ -34,10 +46,18 @@
 -- first_attempt_at (server clock, one domain); the provider occurred_at
 -- anchor is untouched.
 
-create or replace function public.inbound_claim_resume(
+alter table public.inbound_events add column if not exists next_attempt_at timestamptz;
+
+-- AF-4: remove EVERY prior overload before creating this one. PostgREST
+-- resolves RPCs by name+arg-count from the exposed schema; with both the
+-- 2-arg and 3-arg versions present, the worker's actual 2-arg call fails
+-- with 42725 "function is not unique". Superseded signatures must not survive.
+drop function if exists public.inbound_claim_resume(text, interval, interval);
+drop function if exists public.inbound_claim_resume(text, interval);
+
+create function public.inbound_claim_resume(
   p_worker text,
-  p_window interval default interval '23 hours',
-  p_min_dwell interval default interval '2 minutes'
+  p_window interval default interval '23 hours'
 ) returns setof public.inbound_events
 language plpgsql security definer set search_path='public' as $$
 declare
@@ -49,9 +69,6 @@ begin
   if p_window is null or p_window <= interval '0' or p_window > interval '23 hours' then
     raise exception 'resume window must be in (0, 23h]';
   end if;
-  if p_min_dwell is null or p_min_dwell < interval '1 minute' or p_min_dwell > interval '1 hour' then
-    raise exception 'min dwell must be in [1m, 1h]';
-  end if;
 
   select e.event_id into v_id
     from public.inbound_events e
@@ -60,11 +77,7 @@ begin
      and e.payload is not null        -- canonical payload required with the key
      and e.first_attempt_at is not null
      and e.first_attempt_at > now() - p_window
-     -- BOUNDED BACKOFF: a claim becomes resumable only after a minimum dwell
-     -- since its last transition (updated_at covers park, adoption, and the
-     -- 429 rollback). One send attempt per claim per dwell - a tight worker
-     -- loop can never hammer the provider on a rate-limited number.
-     and e.updated_at <= now() - p_min_dwell
+     and (e.next_attempt_at is null or e.next_attempt_at <= now())
    order by e.first_attempt_at asc
    limit 1
    for update skip locked;
@@ -81,6 +94,6 @@ begin
        and t.status = 'db_done'
     returning t.*;
 end $$;
-revoke all on function public.inbound_claim_resume(text, interval, interval) from public, anon, authenticated;
-grant execute on function public.inbound_claim_resume(text, interval, interval) to service_role;
+revoke all on function public.inbound_claim_resume(text, interval) from public, anon, authenticated;
+grant execute on function public.inbound_claim_resume(text, interval) to service_role;
 -- Apply safety: additive function only, no data change on apply.
