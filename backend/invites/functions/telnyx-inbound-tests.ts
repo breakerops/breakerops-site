@@ -130,6 +130,7 @@ function makeWorld(opts: { sendGate?: boolean; rpcRedeem?: any; sendResults?: an
         if (inbound.rows.some((r) => r.event_id === a.p_event_id)) return { data: "duplicate", error: null };
         inbound.rows.push({ event_id: a.p_event_id, event_type: a.p_event_type, from_phone: a.p_from_phone,
           status: claimStatus, owner: a.p_owner, version: 1, occurred_at: occEff ? new Date(occEff).toISOString() : null,
+          action: a.p_action, keyword: a.p_keyword,
           updated_at: new Date().toISOString() });
         if (claimStatus === "stale_event") return { data: "stale", error: null };
         if (claimStatus === "held") return { data: "held", error: null };
