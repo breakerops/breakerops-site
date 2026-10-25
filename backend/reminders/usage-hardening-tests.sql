@@ -19,9 +19,8 @@ revoke all on public.usage_monthly from public, anon, authenticated, service_rol
 grant select, insert, update on public.usage_monthly to service_role;
 revoke all on public.v_usage_billing from public, anon, authenticated, service_role;
 grant select on public.v_usage_billing to service_role;
-revoke all on public.reminders from public, anon, authenticated;
-grant select on public.reminders to authenticated;
-grant all on public.reminders to service_role;
+revoke all on public.reminders from public, anon, authenticated, service_role;
+grant select, insert, update on public.reminders to service_role;
 
 -- closed for public roles: view
 set local role authenticated;
@@ -32,6 +31,9 @@ do $$ begin
  begin perform count(*) from public.usage_monthly; raise exception 'TEST table closed authenticated';
  exception when insufficient_privilege then null; end;
  begin truncate public.usage_monthly; raise exception 'TEST truncate gone authenticated';
+ exception when insufficient_privilege then null; end;
+ -- candidate is pure lockdown: authenticated has no reminders access either
+ begin perform count(*) from public.reminders; raise exception 'TEST reminders closed authenticated';
  exception when insufficient_privilege then null; end;
 end $$;
 reset role;
