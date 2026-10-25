@@ -41,6 +41,9 @@ create table if not exists public.sms_keyword_state (
   updated_at timestamptz not null default now()
 );
 alter table public.sms_keyword_state add column if not exists unknown_received_at timestamptz;
+-- desk evidence: the claim row itself must carry what it asserted
+alter table public.inbound_events add column if not exists action text;
+alter table public.inbound_events add column if not exists keyword text;
 alter table public.sms_keyword_state drop column if exists last_occurred_unknown; -- superseded v3.2 experiment
 alter table public.sms_keyword_state enable row level security;
 revoke all on public.sms_keyword_state from public, anon, authenticated;
@@ -128,8 +131,8 @@ begin
     v_claim_status := 'held';
   end if;
 
-  insert into public.inbound_events(event_id, event_type, from_phone, status, owner, version, occurred_at)
-    values (p_event_id, p_event_type, p_from_phone, v_claim_status, p_owner, 1, v_occurred)
+  insert into public.inbound_events(event_id, event_type, from_phone, status, owner, version, occurred_at, action, keyword)
+    values (p_event_id, p_event_type, p_from_phone, v_claim_status, p_owner, 1, v_occurred, p_action, p_keyword)
     on conflict (event_id) do nothing
     returning true into v_inserted;
   if v_inserted is distinct from true then return 'duplicate'; end if;
