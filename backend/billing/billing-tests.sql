@@ -1,7 +1,16 @@
--- billing-tests.sql: coverage for the NONLIVE billing scaffold (billing.sql).
--- Run as one script in the SQL editor: begin; <this file>; rollback;
--- Everything runs inside a rolled-back transaction - zero residue by design.
--- billing.sql is already applied to the live DB; run this file as-is.
+-- billing-tests.sql: LOCAL FIXTURE HARNESS for the NONLIVE billing scaffold
+-- (billing.sql). Self-contained: the file carries its own begin/rollback.
+--
+-- DO NOT RUN AGAINST THE LIVE/PRODUCTION DATABASE. A rolled-back run is not
+-- effect-free: billing_events.id is GENERATED ALWAYS AS IDENTITY and identity
+-- sequence increments are NOT rolled back. This file inserts one
+-- billing_events row, so every run advances the live sequence permanently.
+-- Run only against a local/disposable Supabase instance.
+--
+-- Fixture users are SYNTHETIC and created inside the transaction
+-- (auth.users insert below). Public-history note: commit 8601d826 used a
+-- real user UUID as the member fixture; this commit replaces it with a
+-- synthetic local user. History is preserved, not rewritten.
 --
 -- Scope: schema invariants, entitlement function, RLS/grants. The TS
 -- functions (billing-checkout, billing-webhook) are env-gated placeholders:
@@ -10,17 +19,24 @@
 -- status<>'draft' (asserted by inspection); live HTTP exercise waits for the
 -- deploy gate.
 
--- mirror the fixed billing.sql grant inside this transaction (rolls back;
--- live DB untouched). Without it the member-read policy is dead.
+begin;
+
+-- mirror the repo-fixed billing.sql grant inside this transaction (rolls
+-- back). The grant fix (commit d3d5b671) is repo-only pending deploy review;
+-- the live DB still lacks it. Without this mirror the member-read policy is
+-- dead and the part-2 tests fail for the wrong reason.
 grant select on public.billing_profiles to authenticated;
 
 -- part 1 (as table owner): fixtures, entitlement, defaults, check constraint
 do $$
 declare b1 uuid='b1111111-1111-4111-8111-111111111111';
         b2 uuid='b2222222-2222-4222-8222-222222222222';
-        uid1 uuid='80f2d1a2-7634-40e8-abf6-904e0aae73b4';
+        uid1 uuid='c1111111-1111-4111-8111-111111111111';
         t text;
 begin
+ -- synthetic local fixture user (business_members.user_id FK -> auth.users)
+ insert into auth.users(id) values (uid1);
+
  insert into public.businesses(id,name,lifecycle) values (b1,'TEST billing active','active');
  insert into public.businesses(id,name,lifecycle) values (b2,'TEST billing purged','purged');
  insert into public.business_members(business_id,user_id) values (b1,uid1);
@@ -51,7 +67,7 @@ end $$;
 set local role authenticated;
 
 do $$
-declare uid1 uuid='80f2d1a2-7634-40e8-abf6-904e0aae73b4';
+declare uid1 uuid='c1111111-1111-4111-8111-111111111111';
         uid2 uuid='c2222222-2222-4222-8222-222222222222';
         b1 uuid='b1111111-1111-4111-8111-111111111111';
         b2 uuid='b2222222-2222-4222-8222-222222222222';
@@ -105,3 +121,5 @@ begin
  then raise exception 'TEST activation guard'; end if;
  raise notice 'billing-tests: all passed';
 end $$;
+
+rollback;
