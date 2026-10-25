@@ -36,7 +36,8 @@
 
 create or replace function public.inbound_claim_resume(
   p_worker text,
-  p_window interval default interval '23 hours'
+  p_window interval default interval '23 hours',
+  p_min_dwell interval default interval '2 minutes'
 ) returns setof public.inbound_events
 language plpgsql security definer set search_path='public' as $$
 declare
@@ -48,6 +49,9 @@ begin
   if p_window is null or p_window <= interval '0' or p_window > interval '23 hours' then
     raise exception 'resume window must be in (0, 23h]';
   end if;
+  if p_min_dwell is null or p_min_dwell < interval '1 minute' or p_min_dwell > interval '1 hour' then
+    raise exception 'min dwell must be in [1m, 1h]';
+  end if;
 
   select e.event_id into v_id
     from public.inbound_events e
@@ -56,6 +60,11 @@ begin
      and e.payload is not null        -- canonical payload required with the key
      and e.first_attempt_at is not null
      and e.first_attempt_at > now() - p_window
+     -- BOUNDED BACKOFF: a claim becomes resumable only after a minimum dwell
+     -- since its last transition (updated_at covers park, adoption, and the
+     -- 429 rollback). One send attempt per claim per dwell - a tight worker
+     -- loop can never hammer the provider on a rate-limited number.
+     and e.updated_at <= now() - p_min_dwell
    order by e.first_attempt_at asc
    limit 1
    for update skip locked;
@@ -72,6 +81,6 @@ begin
        and t.status = 'db_done'
     returning t.*;
 end $$;
-revoke all on function public.inbound_claim_resume(text, interval) from public, anon, authenticated;
-grant execute on function public.inbound_claim_resume(text, interval) to service_role;
+revoke all on function public.inbound_claim_resume(text, interval, interval) from public, anon, authenticated;
+grant execute on function public.inbound_claim_resume(text, interval, interval) to service_role;
 -- Apply safety: additive function only, no data change on apply.
