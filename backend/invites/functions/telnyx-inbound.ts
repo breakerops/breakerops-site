@@ -225,11 +225,16 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
     // affects 0 rows and backs off instead of clobbering a later state.
     const attemptId = randomUUID();
     const bump = { updated_at: new Date().toISOString() };
-    const setClaim = async (status: string, detail: string): Promise<boolean> => {
-      const { data, error } = await store.from("inbound_events")
+    const setClaim = async (status: string, detail: string, fromStatuses?: string[]): Promise<boolean> => {
+      // Owner-guarded always; when fromStatuses is given the write is ALSO
+      // status-guarded, so a row swept to 'uncertain' mid-flight can no
+      // longer be finalized by this worker - the sweep is authoritative once
+      // it lands and the desk owns the row (verified sweep-stage model).
+      let q = store.from("inbound_events")
         .update({ status, detail, ...bump })
-        .eq("event_id", eventId).eq("owner", attemptId)
-        .select("event_id");
+        .eq("event_id", eventId).eq("owner", attemptId);
+      if (fromStatuses) q = q.in("status", fromStatuses);
+      const { data, error } = await q.select("event_id");
       return !error && (data?.length ?? 0) === 1;
     };
     const takeClaim = async (fromStatus: string, toStatus: string, detail?: string): Promise<boolean> => {
@@ -414,7 +419,7 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
         const firstAttempt = Date.parse(resumeFirstAttempt ?? "");
         const age = now() - firstAttempt;
         if (!idemKey || !payload || !Number.isFinite(firstAttempt) || age < 0 || age >= 23 * 60 * 60 * 1000) {
-          await setClaim("uncertain", "resumed send outside the provider replay window or intent incomplete; held for reconciliation - desk verifies with provider by idempotency key before any fresh send. intended: " + effective);
+          await setClaim("uncertain", "resumed send outside the provider replay window or intent incomplete; held for reconciliation - desk verifies with provider by idempotency key before any fresh send. intended: " + effective, ["processing", "db_done", "sending"]);
           return json({ ok: true, deduped: true, held: "replay window expired or intent incomplete; no automatic resend" });
         }
       }
@@ -427,12 +432,12 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
         const { data: ooRow } = await store.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
         const stillMatches = isOptOut ? !!ooRow : !ooRow;
         if (!stillMatches) {
-          await setClaim("stale_event", "confirmation superseded before send; not sent. intended: " + effective);
+          await setClaim("stale_event", "confirmation superseded before send; not sent. intended: " + effective, ["processing", "db_done", "sending"]);
           return json({ ok: true, deduped: true, held: "state changed before send; no contradictory confirmation sent" });
         }
       }
       if (gated) {
-        if (!(await setClaim("done", "send disabled: " + effective))) {
+        if (!(await setClaim("done", "send disabled: " + effective, ["processing", "db_done", "sending"]))) {
           return json({ error: "outcome recording failed; claim left at db_done" }, 500);
         }
         return json({ ok: true, status: statusLabel, send: "disabled" });
@@ -449,7 +454,7 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
       const sent = await doSend(payload!, idemKey!);
       if (sent.outcome === "sent") {
         // 2xx = accepted, not delivered; keep the provider id for the desk.
-        if (!(await setClaim("done", effective + (sent.providerId ? " [provider " + sent.providerId + "]" : "")))) {
+        if (!(await setClaim("done", effective + (sent.providerId ? " [provider " + sent.providerId + "]" : ""), ["sending"]))) {
           // Outcome write failed: claim stays 'sending'. Safe - a redelivery
           // resumes with the SAME key inside the replay window and the
           // provider replays this acceptance rather than double-sending.
@@ -469,12 +474,12 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
       if (sent.outcome === "failed") {
         // Permanent rejection: the same payload would be refused again.
         // Terminal - record for the desk, never auto-retry.
-        if (!(await setClaim("failed", effective + " [" + sent.error + "]"))) {
+        if (!(await setClaim("failed", effective + " [" + sent.error + "]", ["sending"]))) {
           return json({ error: "failure recording failed; claim left at sending, same-key redelivery reconciles" }, 500);
         }
         return json({ error: "confirmation permanently rejected; recorded, not retried: " + sent.error }, 500);
       }
-      if (!(await setClaim("uncertain", "provider outcome unknown after request; held for reconciliation, no automatic resend. intended: " + effective))) {
+      if (!(await setClaim("uncertain", "provider outcome unknown after request; held for reconciliation, no automatic resend. intended: " + effective, ["sending"]))) {
         return json({ error: "uncertainty recording failed; claim left at sending, same-key redelivery reconciles" }, 500);
       }
       return json({ error: "provider outcome unknown; held for reconciliation, no automatic resend" }, 500);
@@ -548,7 +553,7 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
     //  admitted -> welcome text from Matt + notify the inviter (both gated)
     //  member   -> Matt conversation (desk today)
     //  none     -> existing public lead path (desk notification)
-    await setClaim("done", "stub-no-durable-capture");
+    await setClaim("done", "stub-no-durable-capture", ["processing"]);
     return json({ ok: true, status, routing: "stub-no-durable-capture", captured: false, send: gated ? "disabled" : "enabled" });
     });
   } catch (e) {
