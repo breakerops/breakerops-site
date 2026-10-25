@@ -16,9 +16,11 @@
 // type, livemode, created, business_id) is stored - never the raw financial
 // payload. There is NO raw-persistence mode in this candidate: debug
 // fixtures inspect in-memory state instead of persisting payloads.
-// Parser note: header values are trimmed of surrounding whitespace, then
-// compared byte-exact against the expected lowercase hex (Stripe's canonical
-// form). Other encodings (e.g. uppercase hex) fail closed.
+// Parser note: header values are trimmed of surrounding whitespace and hex
+// is compared after decoding, so uppercase hex and padded whitespace are
+// ACCEPTED (verified by adversarial review vectors). Malformed hex or a
+// wrong digest fails. This matches the implementation; do not "tighten" the
+// parser just to satisfy a stricter comment.
 // Idempotency: provider+provider_event_id pre-check, plus a 23505 arm. The
 // pre-check alone is racy; this handler DEPENDS on the unique-index migration
 // candidate (dedupe, sha256 3cc426b2...) being applied before it is treated
