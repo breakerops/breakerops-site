@@ -190,6 +190,11 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
     const p = data.payload ?? {};
     const from = normalizePhone(p?.from?.phone_number ?? p?.from ?? "");
     const text = String(p?.text ?? "").slice(0, 1000);
+    // provider event time, Telnyx's named reconciliation key for out-of-order
+    // delivery ("Reconcile state using occurred_at ... where available" -
+    // webhook fundamentals). May be absent; the claim-keyword RPC treats
+    // unknown timestamps conservatively. Never trusted as exact chronology.
+    const occurredAt = typeof data.occurred_at === "string" ? data.occurred_at : null;
     if (!from) return json({ error: "no sender" }, 400);
 
     // Idempotency: the 5-minute timestamp window is replay rejection, not
@@ -266,14 +271,26 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
       const { data: claimRes, error: rpcErr } = await store.rpc("inbound_claim_keyword", {
         p_event_id: eventId, p_event_type: String(data.event_type ?? ""), p_from_phone: from,
         p_action: isOptOut ? "optout" : "optin", p_keyword: kw, p_owner: attemptId,
+        p_occurred_at: occurredAt,
       });
-      if (rpcErr || (claimRes !== "claimed" && claimRes !== "duplicate")) {
+      if (rpcErr || !["claimed", "duplicate", "stale", "held"].includes(claimRes)) {
         return json({ error: "dedupe store unavailable" }, 500); // fail closed, provider redelivers
+      }
+      if (claimRes === "stale") {
+        // Superseded by a NEWER keyword event for this phone: the claim was
+        // recorded terminal as stale_event, suppression untouched, and NO
+        // confirmation is sent - a contradicting text would be wrong.
+        return json({ ok: true, deduped: true, held: "superseded by a newer keyword event; no confirmation sent" });
+      }
+      if (claimRes === "held") {
+        // Ambiguous resubscribe (missing/equal/unverifiable timestamp):
+        // never auto-applied, suppression preserved, desk reconciles.
+        return json({ ok: true, deduped: true, held: "ambiguous resubscribe held for review; suppression unchanged" });
       }
       if (claimRes === "duplicate") derr = { code: "23505" }; // same read/adopt path as a plain conflict
     } else {
       const { error: e2 } = await store.from("inbound_events").insert(
-        { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from, status: "processing", owner: attemptId, version: 1 }
+        { event_id: eventId, event_type: String(data.event_type ?? ""), from_phone: from, status: "processing", owner: attemptId, version: 1, occurred_at: occurredAt }
       );
       derr = e2;
     }
@@ -287,6 +304,11 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
         // Definitive permanent rejection: retrying the same payload would be
         // refused again. Acknowledge, record, never resend.
         return json({ ok: true, deduped: true, held: "provider permanently rejected this confirmation; recorded, not retried" });
+      }
+      if (ex.status === "stale_event" || ex.status === "held") {
+        // Terminal chronology outcomes: superseded or desk-held. Acknowledge,
+        // never resend, never re-apply.
+        return json({ ok: true, deduped: true, held: ex.status === "stale_event" ? "superseded by a newer keyword event; recorded, not resent" : "held for desk review; recorded, not resent" });
       }
       if (ex.status === "uncertain") {
         // A previous attempt may have reached the provider. Acknowledge the
@@ -381,6 +403,19 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
         if (!idemKey || !payload || !Number.isFinite(firstAttempt) || age < 0 || age >= 23 * 60 * 60 * 1000) {
           await setClaim("uncertain", "resumed send outside the provider replay window or intent incomplete; held for reconciliation - desk verifies with provider by idempotency key before any fresh send. intended: " + effective);
           return json({ ok: true, deduped: true, held: "replay window expired or intent incomplete; no automatic resend" });
+        }
+      }
+      // In-flight contradiction guard: a NEWER keyword event may have
+      // committed since this confirmation's intent was persisted. Re-check
+      // that the suppression state still matches what this text asserts;
+      // sending a contradicting "unsubscribed"/"resubscribed" is worse than
+      // sending nothing. STOP expects the row present; START expects it gone.
+      if (isOptOut || isOptIn) {
+        const { data: ooRow } = await store.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
+        const stillMatches = isOptOut ? !!ooRow : !ooRow;
+        if (!stillMatches) {
+          await setClaim("stale_event", "confirmation superseded before send; not sent. intended: " + effective);
+          return json({ ok: true, deduped: true, held: "state changed before send; no contradictory confirmation sent" });
         }
       }
       if (gated) {
