@@ -9,7 +9,12 @@
 -- with a fresh claim, so an old STOP redelivery can never resurrect a
 -- suppression a later START removed (duplicate -> no re-upsert).
 -- Ordering: concurrent STOP and START for the same phone serialize on the
--- sms_opt_outs row lock; last commit wins, matching "last text wins".
+-- sms_opt_outs row lock; LAST COMMIT WINS. That is execution order, NOT
+-- necessarily the order the user sent the texts - delivery and execution
+-- can differ from message chronology (provider batching, retries, worker
+-- timing). Whether execution-order resolution is acceptable for STOP/START
+-- conflicts, or chronology-aware reconciliation is needed, is an open
+-- design question flagged for independent review, NOT settled here.
 -- CAS/idempotency preserved: claims are still inserted with
 -- status='processing', owner=attempt id, version=1; all later transitions
 -- are the existing owner/version compare-and-swaps. No blind send: this RPC
