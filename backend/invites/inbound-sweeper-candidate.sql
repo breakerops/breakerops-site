@@ -11,10 +11,13 @@
 --   sending    -> 'uncertain' (provider acceptance unknowable post-crash;
 --                  never auto-resend - same rule as the handler)
 -- It never touches done/failed/stale_event/held rows, never deletes, never
--- sends, and is idempotent. Staleness threshold is a parameter: the caller
--- (a scheduled job, deploy-time choice) supplies it; default 15 minutes is
--- far past any reasonable ack+retry window and chosen only as a safe
--- default, not a measured fact.
+-- sends, and is idempotent. Staleness threshold is OUR recovery/lease
+-- threshold: how long a claim may sit untouched before desk triage. It is
+-- NOT a measured provider elapsed-retry policy - the messaging doc's "up to
+-- 3 attempts per URL" is an attempt COUNT and says nothing about elapsed
+-- TIME per attempt, so no elapsed provider budget is claimed here. The
+-- caller (a scheduled job, deploy-time choice) supplies it; the 15-minute
+-- default is a conservative operational choice, not a sourced fact.
 create or replace function public.inbound_sweep_stale(p_stale_before timestamptz default now() - interval '15 minutes')
 returns table(event_id text, old_status text, new_status text)
 language plpgsql security definer set search_path='public' as $$
