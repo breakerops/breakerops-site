@@ -171,6 +171,157 @@ async function sendSms(store: TelnyxStore, payload: Record<string, string>, idem
   }
 }
 
+// Shared send-turn: the exact CAS + send + outcome-write sequence both the
+// webhook handler and the durable resume worker drive. Single source so the
+// two consumers can never drift. All writes are owner-scoped CAS with
+// select(event_id) readback requiring exactly 1 row (verified on the real
+// PostgREST adapter: CAS failure = 0 rows, no error).
+export interface SendTurnArgs {
+  store: TelnyxStore;
+  doSend: (payload: Record<string, string>, idemKey: string) => Promise<SendOutcome>;
+  gated: boolean;
+  eventId: string;
+  attemptId: string;
+  action: string | null;   // 'optout' | 'optin' | null - drives the contradiction re-check
+  phone: string | null;    // contradiction re-check subject
+  intended: string;        // the exact confirmation text persisted as intent
+  idemKey: string;
+  payload: Record<string, string>;
+  now: () => number;
+}
+export type SendTurnOutcome = "sent" | "disabled" | "conflict" | "retryable" | "failed" | "uncertain" | "superseded" | "write_failed";
+export async function runSendTurn(a: SendTurnArgs): Promise<{ outcome: SendTurnOutcome; detail: string; providerId?: string | null }> {
+  const bump = { updated_at: new Date(a.now()).toISOString() };
+  const setClaim = async (status: string, detail: string, fromStatuses?: string[]): Promise<boolean> => {
+    let q = a.store.from("inbound_events")
+      .update({ status, detail, ...bump })
+      .eq("event_id", a.eventId).eq("owner", a.attemptId);
+    if (fromStatuses) q = q.in("status", fromStatuses);
+    const { data, error } = await q.select("event_id");
+    return !error && (data?.length ?? 0) === 1;
+  };
+  const takeClaim = async (fromStatus: string, toStatus: string, detail?: string): Promise<boolean> => {
+    const payload: Record<string, string> = { status: toStatus, ...bump };
+    if (detail !== undefined) payload.detail = detail;
+    const { data, error } = await a.store.from("inbound_events")
+      .update(payload)
+      .eq("event_id", a.eventId).eq("owner", a.attemptId).eq("status", fromStatus)
+      .select("event_id");
+    return !error && (data?.length ?? 0) === 1;
+  };
+  const claimSendTurn = async (detail: string): Promise<boolean> => {
+    const { data, error } = await a.store.from("inbound_events")
+      .update({ status: "sending", detail, ...bump })
+      .eq("event_id", a.eventId).eq("owner", a.attemptId)
+      .in("status", ["db_done", "sending"])
+      .select("event_id");
+    return !error && (data?.length ?? 0) === 1;
+  };
+  const effective = a.intended;
+  // In-flight contradiction guard: a NEWER keyword event may have committed
+  // since this confirmation's intent was persisted. Re-check that the
+  // suppression state still matches what this text asserts; sending a
+  // contradicting "unsubscribed"/"resubscribed" is worse than sending
+  // nothing. STOP expects the row present; START expects it gone.
+  if (a.action === "optout" || a.action === "optin") {
+    const { data: ooRow } = await a.store.from("sms_opt_outs").select("phone").eq("phone", a.phone ?? "").maybeSingle();
+    const stillMatches = a.action === "optout" ? !!ooRow : !ooRow;
+    if (!stillMatches) {
+      await setClaim("stale_event", "confirmation superseded before send; not sent. intended: " + effective, ["processing", "db_done", "sending"]);
+      return { outcome: "superseded", detail: "state changed before send; no contradictory confirmation sent" };
+    }
+  }
+  if (a.gated) {
+    if (!(await setClaim("done", "send disabled: " + effective, ["processing", "db_done", "sending"]))) {
+      return { outcome: "write_failed", detail: "outcome recording failed; claim left at db_done" };
+    }
+    return { outcome: "disabled", detail: effective };
+  }
+  // Atomic pre-send turn, owner-scoped: this attempt must already own the
+  // claim (via insert or adoption CAS) and the claim must be at a pre-send
+  // state. 'sending' is included so a crashed-then-adopted attempt can
+  // resume with its persisted idempotency key.
+  if (!(await claimSendTurn(effective))) {
+    return { outcome: "conflict", detail: "event in progress" };
+  }
+  const sent = await a.doSend(a.payload, a.idemKey);
+  if (sent.outcome === "sent") {
+    // 2xx = accepted, not delivered; keep the provider id for the desk.
+    if (!(await setClaim("done", effective + (sent.providerId ? " [provider " + sent.providerId + "]" : ""), ["sending"]))) {
+      return { outcome: "write_failed", detail: "outcome recording failed; claim left at sending, same-key redelivery reconciles" };
+    }
+    return { outcome: "sent", detail: effective, providerId: sent.providerId ?? null };
+  }
+  if (sent.outcome === "retryable") {
+    // 429 proves non-acceptance: return the claim to db_done so a redelivery
+    // (or the resume worker) retries ONLY the send.
+    if (!(await takeClaim("sending", "db_done", effective))) {
+      return { outcome: "write_failed", detail: "rollback to retryable state failed; claim left at sending, same-key redelivery reconciles" };
+    }
+    return { outcome: "retryable", detail: sent.error ?? "rate-limited" };
+  }
+  if (sent.outcome === "failed") {
+    // Permanent rejection: the same payload would be refused again.
+    // Terminal - record for the desk, never auto-retry.
+    if (!(await setClaim("failed", effective + " [" + sent.error + "]", ["sending"]))) {
+      return { outcome: "write_failed", detail: "failure recording failed; claim left at sending, same-key redelivery reconciles" };
+    }
+    return { outcome: "failed", detail: sent.error ?? "rejected" };
+  }
+  if (!(await setClaim("uncertain", "provider outcome unknown after request; held for reconciliation, no automatic resend. intended: " + effective, ["sending"]))) {
+    return { outcome: "write_failed", detail: "uncertainty recording failed; claim left at sending, same-key redelivery reconciles" };
+  }
+  return { outcome: "uncertain", detail: "provider outcome unknown; held for reconciliation, no automatic resend" };
+}
+
+// Resume-window sanity, shared by the webhook resume path and the worker:
+// the idempotency guarantee is bounded - same key + same payload, within
+// 24h of the FIRST attempt (conservative bound: 23h). A 429 on a resumed
+// attempt does NOT reset this. Missing, expired or future timestamps hold
+// the claim for the desk.
+export function resumeWindowError(idemKey: string | null, payload: Record<string, string> | null, firstAttempt: string | null, now: () => number): boolean {
+  const fa = Date.parse(firstAttempt ?? "");
+  const age = now() - fa;
+  return !idemKey || !payload || !Number.isFinite(fa) || age < 0 || age >= 23 * 60 * 60 * 1000;
+}
+
+// Durable resume worker (AF-1 consumer): adopts ONE parked db_done row via
+// the inbound_claim_resume RPC (FOR UPDATE SKIP LOCKED + status re-check;
+// the row keeps status db_done with the worker as owner), re-verifies the
+// replay window from the persisted first_attempt_at, then drives the SAME
+// send-turn as the webhook path with the ORIGINAL idempotency key and
+// payload - never a rebuilt payload, never a blind resend. Anything outside
+// the window or with incomplete intent goes to 'uncertain' for the desk.
+// Scheduling (pg_cron/scheduled edge invoke) is deployment wiring, not here.
+export interface ResumeWorkerResult { adopted: boolean; eventId?: string; outcome?: SendTurnOutcome | "window_held"; detail?: string }
+export function createTelnyxResumeWorker(deps: TelnyxDeps) {
+  const { store, env } = deps;
+  const doSend = deps.sendSms ?? ((p: Record<string, string>, k: string) => sendSms(store, p, k));
+  const now = deps.now ?? (() => Date.now());
+  const gated = env.get("TELNYX_SEND_ENABLED") !== "true";
+  return async function resumeOnce(workerId: string): Promise<ResumeWorkerResult> {
+    const { data: rows, error } = await store.rpc("inbound_claim_resume", { p_worker: workerId });
+    if (error) return { adopted: false, detail: "resume claim unavailable: " + ((error as any)?.message ?? String(error)) };
+    const row = (rows as any[])?.[0];
+    if (!row) return { adopted: false };
+    const intended = String(row.detail ?? "");
+    if (resumeWindowError(row.idem_key ?? null, row.payload ?? null, row.first_attempt_at ?? null, now)) {
+      const bump = { updated_at: new Date(now()).toISOString() };
+      await store.from("inbound_events")
+        .update({ status: "uncertain", detail: "resumed send outside the provider replay window or intent incomplete; held for reconciliation - desk verifies with provider by idempotency key before any fresh send. intended: " + intended, ...bump })
+        .eq("event_id", row.event_id).eq("owner", workerId).eq("status", "db_done")
+        .select("event_id");
+      return { adopted: true, eventId: String(row.event_id), outcome: "window_held", detail: "replay window expired or intent incomplete; parked for the desk" };
+    }
+    const r = await runSendTurn({
+      store, doSend, gated, eventId: String(row.event_id), attemptId: workerId,
+      action: (row.action as string) ?? null, phone: (row.from_phone as string) ?? null,
+      intended, idemKey: String(row.idem_key), payload: row.payload as Record<string, string>, now,
+    });
+    return { adopted: true, eventId: String(row.event_id), outcome: r.outcome, detail: r.detail };
+  };
+}
+
 export function createTelnyxInboundHandler(deps: TelnyxDeps) {
   const { store, env } = deps;
   // Ack-fast scheduler: after the DURABLE claim, remaining work (keyword
@@ -246,27 +397,16 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
       const { data, error } = await q.select("event_id");
       return !error && (data?.length ?? 0) === 1;
     };
-    const takeClaim = async (fromStatus: string, toStatus: string, detail?: string): Promise<boolean> => {
-      const payload: Record<string, string> = { status: toStatus, ...bump };
-      if (detail !== undefined) payload.detail = detail;
-      const { data, error } = await store.from("inbound_events")
-        .update(payload)
-        .eq("event_id", eventId).eq("owner", attemptId).eq("status", fromStatus)
-        .select("event_id");
-      return !error && (data?.length ?? 0) === 1;
-    };
     const setIntent = async (detail: string, idemKey: string, payload: Record<string, string>): Promise<boolean> => {
+      // AF-2: status-guarded, not owner-only. A row swept to 'uncertain'
+      // while this attempt stalled between the DB step and intent must NOT
+      // be resurrected to db_done - the sweep is authoritative once it
+      // lands and the desk owns the row. 0 rows -> the caller 500s and the
+      // claim stays with the desk. setIntent only ever runs from
+      // 'processing' (fresh intent; the resume path reuses persisted intent).
       const { data, error } = await store.from("inbound_events")
         .update({ status: "db_done", detail, idem_key: idemKey, payload, first_attempt_at: new Date().toISOString(), ...bump })
-        .eq("event_id", eventId).eq("owner", attemptId)
-        .select("event_id");
-      return !error && (data?.length ?? 0) === 1;
-    };
-    const claimSendTurn = async (detail: string): Promise<boolean> => {
-      const { data, error } = await store.from("inbound_events")
-        .update({ status: "sending", detail, ...bump })
-        .eq("event_id", eventId).eq("owner", attemptId)
-        .in("status", ["db_done", "sending"])
+        .eq("event_id", eventId).eq("owner", attemptId).eq("status", "processing")
         .select("event_id");
       return !error && (data?.length ?? 0) === 1;
     };
@@ -425,73 +565,37 @@ export function createTelnyxInboundHandler(deps: TelnyxDeps) {
         // attempt's possible acceptance. EVERY resumed send, whatever the
         // claim status, must prove a sane in-window first attempt: missing,
         // expired or future timestamps hold the claim for the desk.
-        const firstAttempt = Date.parse(resumeFirstAttempt ?? "");
-        const age = now() - firstAttempt;
-        if (!idemKey || !payload || !Number.isFinite(firstAttempt) || age < 0 || age >= 23 * 60 * 60 * 1000) {
+        if (resumeWindowError(idemKey, payload, resumeFirstAttempt, now)) {
           await setClaim("uncertain", "resumed send outside the provider replay window or intent incomplete; held for reconciliation - desk verifies with provider by idempotency key before any fresh send. intended: " + effective, ["processing", "db_done", "sending"]);
           return json({ ok: true, deduped: true, held: "replay window expired or intent incomplete; no automatic resend" });
         }
       }
-      // In-flight contradiction guard: a NEWER keyword event may have
-      // committed since this confirmation's intent was persisted. Re-check
-      // that the suppression state still matches what this text asserts;
-      // sending a contradicting "unsubscribed"/"resubscribed" is worse than
-      // sending nothing. STOP expects the row present; START expects it gone.
-      if (isOptOut || isOptIn) {
-        const { data: ooRow } = await store.from("sms_opt_outs").select("phone").eq("phone", from).maybeSingle();
-        const stillMatches = isOptOut ? !!ooRow : !ooRow;
-        if (!stillMatches) {
-          await setClaim("stale_event", "confirmation superseded before send; not sent. intended: " + effective, ["processing", "db_done", "sending"]);
-          return json({ ok: true, deduped: true, held: "state changed before send; no contradictory confirmation sent" });
-        }
+      // Shared send-turn (single source with the resume worker):
+      // contradiction re-check, send gate, owner-scoped send-turn CAS,
+      // provider send with the persisted key+payload, outcome writes.
+      const turn = await runSendTurn({
+        store, doSend, gated, eventId, attemptId,
+        action: isOptOut ? "optout" : isOptIn ? "optin" : null, phone: from,
+        intended: effective, idemKey: idemKey!, payload: payload!, now,
+      });
+      switch (turn.outcome) {
+        case "superseded":
+          return json({ ok: true, deduped: true, held: turn.detail });
+        case "disabled":
+          return json({ ok: true, status: statusLabel, send: "disabled" });
+        case "conflict":
+          return json({ error: turn.detail }, 409);
+        case "sent":
+          return json({ ok: true, status: statusLabel, send: "enabled", reply_sent: true, provider_id: turn.providerId ?? null });
+        case "retryable":
+          return json({ error: "confirmation rate-limited; will retry on redelivery: " + turn.detail }, 500);
+        case "failed":
+          return json({ error: "confirmation permanently rejected; recorded, not retried: " + turn.detail }, 500);
+        case "uncertain":
+          return json({ error: turn.detail }, 500);
+        default: // write_failed
+          return json({ error: turn.detail }, 500);
       }
-      if (gated) {
-        if (!(await setClaim("done", "send disabled: " + effective, ["processing", "db_done", "sending"]))) {
-          return json({ error: "outcome recording failed; claim left at db_done" }, 500);
-        }
-        return json({ ok: true, status: statusLabel, send: "disabled" });
-      }
-      // Atomic pre-send turn, owner-scoped: this attempt must already own
-      // the claim (via insert or adoption CAS) and the claim must be at a
-      // pre-send state. A concurrent replay/worker that lost ownership
-      // affects 0 rows and backs off for the provider's retry instead of
-      // double-sending. 'sending' is included so a crashed-then-adopted
-      // attempt can resume with its persisted idempotency key.
-      if (!(await claimSendTurn(effective))) {
-        return json({ error: "event in progress" }, 409);
-      }
-      const sent = await doSend(payload!, idemKey!);
-      if (sent.outcome === "sent") {
-        // 2xx = accepted, not delivered; keep the provider id for the desk.
-        if (!(await setClaim("done", effective + (sent.providerId ? " [provider " + sent.providerId + "]" : ""), ["sending"]))) {
-          // Outcome write failed: claim stays 'sending'. Safe - a redelivery
-          // resumes with the SAME key inside the replay window and the
-          // provider replays this acceptance rather than double-sending.
-          return json({ error: "outcome recording failed; claim left at sending, same-key redelivery reconciles" }, 500);
-        }
-        return json({ ok: true, status: statusLabel, send: "enabled", reply_sent: true, provider_id: sent.providerId ?? null });
-      }
-      if (sent.outcome === "retryable") {
-        // 429 proves non-acceptance: return the claim to db_done so the
-        // provider's redelivery retries ONLY the send (bounded by the
-        // provider's own redelivery policy).
-        if (!(await takeClaim("sending", "db_done", effective))) {
-          return json({ error: "rollback to retryable state failed; claim left at sending, same-key redelivery reconciles" }, 500);
-        }
-        return json({ error: "confirmation rate-limited; will retry on redelivery: " + sent.error }, 500);
-      }
-      if (sent.outcome === "failed") {
-        // Permanent rejection: the same payload would be refused again.
-        // Terminal - record for the desk, never auto-retry.
-        if (!(await setClaim("failed", effective + " [" + sent.error + "]", ["sending"]))) {
-          return json({ error: "failure recording failed; claim left at sending, same-key redelivery reconciles" }, 500);
-        }
-        return json({ error: "confirmation permanently rejected; recorded, not retried: " + sent.error }, 500);
-      }
-      if (!(await setClaim("uncertain", "provider outcome unknown after request; held for reconciliation, no automatic resend. intended: " + effective, ["sending"]))) {
-        return json({ error: "uncertainty recording failed; claim left at sending, same-key redelivery reconciles" }, 500);
-      }
-      return json({ error: "provider outcome unknown; held for reconciliation, no automatic resend" }, 500);
     };
 
     // Ack-fast boundary: everything below is post-claim work. The claim (and
