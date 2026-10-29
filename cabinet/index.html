@@ -1,0 +1,152 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Cabinet - BreakerOps</title>
+<link rel="stylesheet" href="/assets/css/styles.css">
+<style>
+body{font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:16px;background:#0b0e14;color:#e8eaed}
+h1{font-size:1.3rem} h2{font-size:1.05rem;margin:1.4em 0 .4em}
+.card{background:#151a24;border:1px solid #262d3a;border-radius:10px;padding:12px 14px;margin:.5em 0}
+.muted{color:#9aa3b2;font-size:.85rem}
+button{background:#2f6fed;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:.9rem;cursor:pointer}
+input,select{background:#0f1420;color:#e8eaed;border:1px solid #2a3242;border-radius:8px;padding:7px 10px;font-size:.9rem}
+.row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.badge{font-size:.72rem;padding:2px 8px;border-radius:999px;background:#223;border:1px solid #345}
+a{color:#7da7ff}
+</style>
+</head>
+<body>
+<h1>Cabinet</h1>
+<p class="muted" id="who">Loading...</p>
+
+<h2>Money</h2>
+<div class="card" id="money-unbilled"><span class="muted">Loading...</span></div>
+<div class="card" id="money-invoices"></div>
+<div class="card" id="money-quotes"></div>
+
+<h2>Open questions</h2>
+<div class="card" id="queue"><span class="muted">None.</span></div>
+
+<h2>Jobs</h2>
+<div class="row" style="margin:.4em 0">
+  <input id="newjob" placeholder="New job title (e.g. Miller on Oak St)" size="30">
+  <input id="newcust" placeholder="Customer name" size="18">
+  <button id="addjob">Add job</button>
+</div>
+<div id="jobs"></div>
+
+<h2>Warranty</h2>
+<div id="warranty"><span class="muted">None recorded.</span></div>
+
+<p class="muted" style="margin-top:2em">Cabinet records come from your texts. Nothing here is sent to customers. Exports are private to you.</p>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SB_URL='https://euchkgnqxycqzgamucry.supabase.co';
+const SB_KEY='sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne';
+const sb=supabase.createClient(SB_URL,SB_KEY);
+const $=id=>document.getElementById(id);
+const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
+const money=c=>c==null?'no price recorded':'$'+(c/100).toFixed(2);
+
+async function init(){
+  const {data:{session}}=await sb.auth.getSession();
+  if(!session){location.href='/login/';return;}
+  $('who').textContent='Signed in. Records shown only for businesses you belong to.';
+  await loadAll();
+}
+
+async function loadAll(){
+  const [{data:jobs},{data:extras},{data:invoices},{data:queue},{data:warr},{data:custs}]=await Promise.all([
+    sb.from('cabinet_jobs').select('id,title,status,customer_id').order('created_at'),
+    sb.from('unbilled_extras').select('id,job_id,description,amount_cents,state,customer_authorization').order('created_at',{ascending:false}),
+    sb.from('cabinet_invoices').select('id,job_id,amount_cents,issued_at,due_at,state').order('due_at'),
+    sb.from('resolution_queue').select('id,question,options,status').eq('status','open'),
+    sb.from('warranty_records').select('id,job_id,item,installed_at,term_text,state').order('installed_at',{ascending:false}),
+    sb.from('cabinet_customers').select('id,name'),
+  ]);
+  const jmap=Object.fromEntries((jobs||[]).map(j=>[j.id,j.title]));
+  const cmap=Object.fromEntries((custs||[]).map(c=>[c.id,c.name]));
+
+  const ub=(extras||[]).filter(e=>e.state!=='invoiced'&&e.state!=='voided');
+  $('money-unbilled').innerHTML='<b>Unbilled extras</b><br>'+(ub.length?ub.map(e=>
+    `<div>${esc(jmap[e.job_id]||'(unresolved job)')} - ${esc(e.description)} - ${money(e.amount_cents)} <span class="badge">${esc(e.state)}</span> <span class="badge">customer approval: ${esc(e.customer_authorization)}</span></div>`
+  ).join(''):'<span class="muted">None.</span>');
+
+  const open=(invoices||[]).filter(i=>i.state==='open');
+  $('money-invoices').innerHTML='<b>Who owes you</b><br>'+(open.length?open.map(i=>{
+    const days=i.due_at?Math.floor((Date.now()-new Date(i.due_at))/864e5):null;
+    return `<div>${esc(jmap[i.job_id]||'(no job)')} - ${money(i.amount_cents)}${days!=null&&days>0?` <span class="badge">${days}d out</span>`:''}</div>`;
+  }).join(''):'<span class="muted">No open invoices recorded.</span>');
+
+  $('money-quotes').innerHTML='<b>Open quotes / follow-ups</b><br><span class="muted">Quote tracking lands in a later slice; stall flags are not built yet.</span>';
+
+  $('queue').innerHTML=(queue&&queue.length)?queue.map(q=>{
+    const opts=(q.options||[]).map(o=>`<button data-res="${q.id}" data-job="${o.job_id}">${esc(o.title)}</button>`).join(' ');
+    return `<div>${esc(q.question)} ${opts||'<span class="muted">(no candidates - reply by text)</span>'}</div>`;
+  }).join(''):'<span class="muted">None.</span>';
+
+  $('jobs').innerHTML=(jobs||[]).map(j=>
+    `<div class="card"><b>${esc(j.title)}</b> <span class="badge">${esc(j.status)}</span>${j.customer_id?` <span class="muted">${esc(cmap[j.customer_id]||'')}</span>`:''} <button data-exp="${j.id}" data-title="${esc(j.title)}">Export</button></div>`
+  ).join('')||'<span class="muted">No jobs yet.</span>';
+
+  $('warranty').innerHTML=(warr&&warr.length)?warr.map(w=>
+    `<div>${esc(jmap[w.job_id]||'')} - ${esc(w.item)} - term: ${w.term_text?esc(w.term_text):'term not recorded'} <span class="badge">${esc(w.state)}</span></div>`
+  ).join(''):'<span class="muted">None recorded.</span>';
+
+  document.querySelectorAll('[data-res]').forEach(b=>b.onclick=async()=>{
+    await sb.from('resolution_queue').update({status:'resolved',resolution:{job_id:b.dataset.job},resolved_at:new Date().toISOString()}).eq('id',b.dataset.res);
+    await loadAll();
+  });
+  document.querySelectorAll('[data-exp]').forEach(b=>b.onclick=()=>exportJob(b.dataset.exp,b.dataset.title));
+}
+
+async function exportJob(jobId,title){
+  const [job,extras,inv,pay,warr,sched,msgs]=await Promise.all([
+    sb.from('cabinet_jobs').select('*').eq('id',jobId).single(),
+    sb.from('unbilled_extras').select('*').eq('job_id',jobId),
+    sb.from('cabinet_invoices').select('*').eq('job_id',jobId),
+    sb.from('payment_observations').select('*'),
+    sb.from('warranty_records').select('*').eq('job_id',jobId),
+    sb.from('schedule_proposals').select('*').eq('job_id',jobId),
+    sb.from('inbound_messages').select('id,from_phone,body,received_at'),
+  ]);
+  const manifest={
+    exported_at:new Date().toISOString(),
+    job:job.data,
+    unbilled_extras:extras.data,
+    invoices:inv.data,
+    payment_observations:(pay.data||[]).filter(p=>(inv.data||[]).some(i=>i.id===p.invoice_id)),
+    warranty_records:warr.data,
+    schedule_proposals:sched.data,
+    source_message_ids:[...new Set([...(extras.data||[]),...(warr.data||[]),...(sched.data||[])].map(r=>r.source_ref).filter(Boolean))],
+    note:'Private export. Owner-only. Includes full source references; texts are never auto-deleted.'
+  };
+  await sb.from('cabinet_exports').insert({business_id:job.data.business_id,job_id:jobId,manifest});
+  const blob=new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'});
+  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
+  a.download='breakerops-export-'+(title||'job').replace(/[^a-z0-9]+/gi,'-')+'.json';a.click();
+}
+
+document.getElementById('addjob').onclick=async()=>{
+  const title=$('newjob').value.trim(); if(!title)return;
+  const custName=$('newcust').value.trim();
+  const {data:{session}}=await sb.auth.getSession();
+  const {data:mem}=await sb.from('business_members').select('business_id').limit(1).single();
+  if(!mem){alert('No business membership found.');return;}
+  let custId=null;
+  if(custName){
+    const {data:c}=await sb.from('cabinet_customers').insert({business_id:mem.business_id,name:custName}).select('id').single();
+    custId=c?.id||null;
+  }
+  await sb.from('cabinet_jobs').insert({business_id:mem.business_id,title,customer_id:custId});
+  $('newjob').value='';$('newcust').value='';
+  await loadAll();
+};
+
+init();
+</script>
+</body>
+</html>
