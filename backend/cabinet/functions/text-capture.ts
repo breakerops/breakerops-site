@@ -132,8 +132,10 @@ serve(async (req) => {
   const { data: opt } = await sb
     .from('sms_opt_outs').select('phone').eq('phone', fromPhone).maybeSingle();
 
-  // 3. Idempotent durable commit of the immutable source.
-  const { data: msg, error: msgErr } = await sb
+  // 3. Idempotent durable commit of the immutable source. ignoreDuplicates:
+  // a replayed provider delivery inserts NOTHING and returns no row, and we
+  // stop there - one capture, no duplicated extras/resolutions, no re-ack.
+  const { data: msgRows, error: msgErr } = await sb
     .from('inbound_messages')
     .upsert({
       business_id: businessId,
@@ -145,11 +147,13 @@ serve(async (req) => {
       body,
       payload: event,
       received_at: event.received_at ?? new Date().toISOString(),
-    }, { onConflict: 'business_id,provider,provider_message_id' })
-    .select('id')
-    .single();
+    }, { onConflict: 'business_id,provider,provider_message_id', ignoreDuplicates: true })
+    .select('id');
   if (msgErr) return json({ error: 'capture failed' }, 500);
-  const duplicate = false; // upsert: replay is safe; record count stays 1
+  if (!msgRows || msgRows.length === 0) {
+    return json({ ok: true, duplicate: true, outcome: { kind: 'duplicate_replayed' }, reply: null });
+  }
+  const msg = msgRows[0];
 
   // 4. Parse (versioned, stored separately).
   const parsed = parse(body);
