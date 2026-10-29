@@ -24,8 +24,19 @@ import { createClient } from 'https://esm.sh/@supabase/supabase-js@2';
 
 const SB_URL = Deno.env.get('SUPABASE_URL')!;
 const SB_KEY = Deno.env.get('SUPABASE_SERVICE_ROLE_KEY')!;
-const REMINDERS_KEY = Deno.env.get('REMINDERS_KEY') ?? '';
-const TELNYX_PUBLIC_KEY = Deno.env.get('TELNYX_PUBLIC_KEY') ?? '';
+
+// Shared webhook secret + Telnyx signing public key live in private.config
+// (service-role read; never passes through operator context). Env vars are a
+// fallback for local testing only.
+let cfgCache: Record<string, string> | null = null;
+async function cfg(sb: any, key: string): Promise<string> {
+  if (!cfgCache) cfgCache = {};
+  if (!(key in cfgCache)) {
+    const { data } = await sb.rpc('webhook_config', { p_key: key });
+    cfgCache[key] = (data as string) || Deno.env.get(key.toUpperCase()) || '';
+  }
+  return cfgCache[key];
+}
 
 const PARSER_VERSION = 'parse-v1';
 
@@ -36,8 +47,8 @@ function json(body: unknown, status = 200) {
   });
 }
 
-async function verifyTelnyx(req: Request, raw: string): Promise<boolean> {
-  if (!TELNYX_PUBLIC_KEY) return false; // not wired -> not trusted
+async function verifyTelnyx(req: Request, raw: string, pubKey: string): Promise<boolean> {
+  if (!pubKey) return false; // not wired -> not trusted
   // Telnyx ed25519 signature over `${timestamp}|${rawBody}`
   try {
     const sig = req.headers.get('telnyx-signature-ed25519') ?? '';
@@ -45,7 +56,7 @@ async function verifyTelnyx(req: Request, raw: string): Promise<boolean> {
     if (!sig || !ts) return false;
     const key = await crypto.subtle.importKey(
       'raw',
-      Uint8Array.from(atob(TELNYX_PUBLIC_KEY), (c) => c.charCodeAt(0)),
+      Uint8Array.from(atob(pubKey), (c) => c.charCodeAt(0)),
       { name: 'Ed25519' },
       false,
       ['verify'],
@@ -80,10 +91,12 @@ function parse(body: string) {
 
 serve(async (req) => {
   if (req.method !== 'POST') return json({ error: 'method' }, 405);
-  if (REMINDERS_KEY && req.headers.get('x-reminders-key') !== REMINDERS_KEY) {
+  const raw = await req.text();
+  const sb = createClient(SB_URL, SB_KEY);
+  const remindersKey = await cfg(sb, 'reminders_key');
+  if (remindersKey && req.headers.get('x-reminders-key') !== remindersKey) {
     return json({ error: 'unauthorized' }, 401);
   }
-  const raw = await req.text();
 
   let event: any;
   try { event = JSON.parse(raw); } catch { return json({ error: 'bad json' }, 400); }
@@ -95,11 +108,9 @@ serve(async (req) => {
   const body = String(event.body ?? '');
   if (!providerMessageId || !fromPhone) return json({ error: 'missing identity fields' }, 400);
 
-  if (provider === 'telnyx' && !(await verifyTelnyx(req, raw))) {
+  if (provider === 'telnyx' && !(await verifyTelnyx(req, raw, await cfg(sb, 'telnyx_public_key')))) {
     return json({ error: 'unverified signature' }, 401);
   }
-
-  const sb = createClient(SB_URL, SB_KEY);
 
   // 1. Resolve tenant via VERIFIED phone identity only.
   const { data: ids, error: idErr } = await sb
