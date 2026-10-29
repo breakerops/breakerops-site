@@ -345,3 +345,11 @@ $$;
 revoke all on function public.webhook_config(text) from public;
 revoke all on function public.webhook_config(text) from anon;
 revoke all on function public.webhook_config(text) from authenticated;
+
+-- grants (live-applied 2026-10-28; SQL editor does not inherit dashboard default privileges)
+grant select, insert, update, delete on public.cabinet_customers, public.cabinet_jobs, public.unbilled_extras, public.cabinet_invoices, public.payment_observations, public.warranty_records, public.schedule_proposals, public.outbound_drafts, public.resolution_queue, public.cabinet_history, public.cabinet_exports, public.inbound_messages, public.source_attachments, public.attachment_fields, public.message_parses, public.phone_identities to service_role;
+grant select, insert, update on public.cabinet_customers, public.cabinet_jobs, public.unbilled_extras, public.cabinet_invoices, public.payment_observations, public.warranty_records, public.schedule_proposals, public.outbound_drafts, public.resolution_queue, public.cabinet_exports, public.phone_identities to authenticated;
+grant select, insert on public.cabinet_history, public.inbound_messages, public.source_attachments, public.attachment_fields, public.message_parses to authenticated;
+grant execute on function public.webhook_config(text) to service_role;
+
+grant select on public.sms_opt_outs to service_role; -- opt-out check needs it
