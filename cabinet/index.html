@@ -113,6 +113,8 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money=c=>c==null?'no price recorded':'$'+(c/100).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
 const daysWord=d=>d+' '+(d===1?'day':'days');
+const firstWords=(t,n)=>{const w=String(t||'').trim().split(/\s+/).filter(Boolean);return w.slice(0,n).join(' ')+(w.length>n?'...':'');};
+const custName=(x,jobs,custs)=>{const j=(jobs||[]).find(j=>j.id===x.job_id);const c=j&&(custs||[]).find(c=>c.id===j.customer_id);return (c&&c.name)||(j&&j.title)||x.recipient;};
 const daysSince=t=>Math.floor((Date.now()-new Date(t))/864e5);
 let STALL_DAYS=+(localStorage.getItem('stallDays')||28); // owner-set; F1408 documents 28 days
 
@@ -136,12 +138,15 @@ async function loadData(){
     q('payment_observations','id,invoice_id,amount_cents,source,note'),
     sb.from('cabinet_quotes').select('id,job_id,customer_id,amount_cents,state,quoted_at,nudge_count').order('quoted_at').then(r=>r.data||[]),
     sb.from('unbilled_extras').select('id,job_id,description,amount_cents,state,customer_authorization').order('created_at',{ascending:false}).then(r=>r.data||[]),
-    sb.from('resolution_queue').select('id,question,options,status').eq('status','open').then(r=>r.data||[]),
+    sb.from('resolution_queue').select('id,question,options,status,source_ref').eq('status','open').then(r=>r.data||[]),
     sb.from('outbound_drafts').select('id,kind,job_id,recipient,body,state,version').in('state',['draft','approved']).order('created_at',{ascending:false}).then(r=>r.data||[]),
     sb.from('schedule_proposals').select('id,job_id,proposed_start,proposed_end,state,created_by').neq('state','canceled').order('proposed_start').then(r=>r.data||[]),
     sb.from('warranty_records').select('id,job_id,item,installed_at,term_text,notes,state').order('installed_at',{ascending:false}).then(r=>r.data||[]),
   ]);
   d={jobs,custs,invoices,pays,quotes,extras,queue,drafts,sched,warr};
+  const snips={};
+  const refs=(queue||[]).map(x=>x.source_ref).filter(Boolean);
+  if(refs.length){const r=await sb.from('inbound_messages').select('id,body').in('id',refs);(r.data||[]).forEach(m=>{snips[m.id]=m.body;});}
   const opts='<option value="">(no job)</option>'+jobs.map(x=>`<option value="${x.id}">${esc(x.title)}</option>`).join('');
   $('schedjob').innerHTML=opts;$('quotejob').innerHTML=opts;
   render();
@@ -165,10 +170,10 @@ function render(){
   const items=[];
   (d.queue||[]).forEach(x=>{
     const opts=(x.options||[]).map((o,i)=>`<button data-q="${x.id}" data-i="${i}">${esc(o.title||o.label||('option '+(i+1)))}</button>`).join('');
-    items.push(`<div class="row"><span class="what">${(x.question==='which_job'||x.question==='which_of_these_jobs')?'One of your texts needs a job picked.':esc(x.question)}</span><span class="meta">Pick the job it belongs to.</span><span>${opts}</span></div>`);
+    items.push(`<div class="row"><span class="what">${(x.question==='which_job'||x.question==='which_of_these_jobs')?'One of your texts needs a job picked.':esc(x.question)}</span><span class="meta">${snips[x.source_ref]?'"'+esc(firstWords(snips[x.source_ref],8))+'" - ':''}Pick the job it belongs to.</span><span>${opts}</span></div>`);
   });
   (d.drafts||[]).filter(x=>x.state==='draft').forEach(x=>{
-    items.push(`<div class="row"><span class="what">${esc(x.body)}</span><span class="meta">Draft ${esc(x.kind)} to ${esc(x.recipient)} - never sends by itself.</span><span><button class="primary" data-dact="approved" data-id="${x.id}" data-v="${x.version}">Approve these words</button><button data-dact="canceled" data-id="${x.id}">Not this</button></span></div>`);
+    items.push(`<div class="row"><span class="what">${esc(x.body)}</span><span class="meta">Draft ${esc(x.kind)} to ${esc(custName(x,d.jobs,d.custs))} - never sends by itself.</span><span><button class="primary" data-dact="approved" data-id="${x.id}" data-v="${x.version}">Approve these words</button><button data-dact="canceled" data-id="${x.id}">Not this</button></span></div>`);
   });
   $('needs').innerHTML = items.length
     ? `<h2>Needs your yes</h2>${items.join('')}`
@@ -177,7 +182,7 @@ function render(){
   $('needs').querySelectorAll('[data-dact]').forEach(b=>b.onclick=()=>draftAction(b));
 
   const st=stalled();
-  $('nudge').innerHTML = `<h2>Worth a nudge</h2><span class="quiet">One reminder after ${STALL_DAYS} quiet days. <button id="stallcfg" style="margin:0;font-size:13px">change</button></span>`+(st.length?st.map(x=>`<div class="row"><span class="what">${esc(jobName(x.job_id)||'A customer')} - ${money(x.amount_cents)}</span><span class="meta">Quoted ${daysWord(daysSince(x.quoted_at))} ago, no answer yet.</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Nudged</button></span></div>`).join(''):'');
+  $('nudge').innerHTML = `<h2>Worth a nudge</h2><span class="quiet">One reminder per quote, ${STALL_DAYS} quiet days after it goes out. <button id="stallcfg" style="margin:0;font-size:13px">change</button></span>`+(st.length?st.map(x=>`<div class="row"><span class="what">${esc(jobName(x.job_id)||'A customer')} - ${money(x.amount_cents)}</span><span class="meta">Quoted ${daysWord(daysSince(x.quoted_at))} ago, no answer yet.</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Nudged</button></span></div>`).join(''):'');
   $('stallcfg').onclick=()=>{
     const v=prompt('Remind me about an unanswered quote after how many days?',String(STALL_DAYS));
     const n=parseInt(v,10);if(Number.isFinite(n)&&n>0&&n<365){STALL_DAYS=n;localStorage.setItem('stallDays',String(n));render();}
