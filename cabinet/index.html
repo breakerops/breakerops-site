@@ -29,8 +29,22 @@ a{color:#7da7ff}
 <h2>Money</h2>
 <div class="card" id="money-invoices"></div>
 <div class="card" id="money-quotes"></div>
+<div class="row" style="margin:.3em 0 1em">
+  <select id="quotejob"></select>
+  <input id="quoteamt" placeholder="Amount $" size="9" inputmode="decimal">
+  <button id="addquote" class="ghost">Record a quote</button>
+</div>
 <div class="card" id="money-unbilled"></div>
 <div class="card" id="money-renewals"></div>
+
+<h2>Schedule</h2>
+<p class="muted">Your plan and what the customer confirmed are tracked separately and never merged. Confirmations from customer texts land here on their own.</p>
+<div class="row" style="margin:.4em 0">
+  <select id="schedjob"></select>
+  <input id="schedstart" type="datetime-local">
+  <button id="addplan">Add to my plan</button>
+</div>
+<div class="card" id="sched"><span class="muted">Nothing scheduled.</span></div>
 
 <h2>Open questions</h2>
 <div class="card" id="queue"><span class="muted">None.</span></div>
@@ -79,7 +93,9 @@ async function loadAll(){
     sb.from('cabinet_jobs').select('id,title,status,customer_id').order('created_at'),
     sb.from('cabinet_customers').select('id,name')]);
   jobs=j||[];custs=c||[];
-  await Promise.all([loadMoney(),loadQueue(),loadDrafts(),loadJobs(),loadWarranty()]);
+  const opts='<option value="">(no job)</option>'+jobs.map(x=>`<option value="${x.id}">${esc(x.title)}</option>`).join('');
+  $('schedjob').innerHTML=opts;$('quotejob').innerHTML=opts;
+  await Promise.all([loadMoney(),loadQueue(),loadDrafts(),loadJobs(),loadWarranty(),loadSched()]);
 }
 
 async function loadMoney(){
@@ -190,19 +206,55 @@ async function exportJob(jobId){
   const refs=[...new Set([...(extras.data||[]),...(invoices.data||[]),...(quotes.data||[]),...(warr.data||[]),...(drafts.data||[])].map(r=>r.source_ref).filter(Boolean))];
   const {data:msgs}=refs.length?await sb.from('inbound_messages').select('*').in('id',refs):{data:[]};
   const folder={exported_at:new Date().toISOString(),job:(job.data||[])[0]||null,extras:extras.data||[],invoices:invoices.data||[],quotes:quotes.data||[],warranty:warr.data||[],drafts:drafts.data||[],source_messages:msgs||[],payment_observations:(pays.data||[]).filter(p=>invIds.has(p.invoice_id))};
-  try{await sb.from('cabinet_exports').insert({business_id:folder.job.business_id,job_id:jobId,manifest:{recorded_by:'owner-export-button',counts:{extras:folder.extras.length,invoices:folder.invoices.length,quotes:folder.quotes.length,warranty:folder.warranty.length,drafts:folder.drafts.length,source_messages:folder.source_messages.length},exported_at:folder.exported_at}});}catch(e){}
+  const counts={extras:folder.extras.length,invoices:folder.invoices.length,quotes:folder.quotes.length,warranty:folder.warranty.length,drafts:folder.drafts.length,source_messages:folder.source_messages.length,payment_observations:folder.payment_observations.length};
+  const body1=JSON.stringify({...folder,manifest:{counts}},null,2);
+  const hash=[...new Uint8Array(await crypto.subtle.digest('SHA-256',new TextEncoder().encode(body1)))].map(b=>b.toString(16).padStart(2,'0')).join('');
+  const manifest={counts,content_sha256:hash,byte_size:body1.length,recorded_by:'owner-export-button',exported_at:folder.exported_at,note:'sha-256 over this file body with counts-only manifest; hash covers every record byte'};
+  const out=JSON.stringify({...folder,manifest},null,2);
   const name=((folder.job&&folder.job.title)||'job').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
   const a=document.createElement('a');
-  a.href=URL.createObjectURL(new Blob([JSON.stringify(folder,null,2)],{type:'application/json'}));
+  a.href=URL.createObjectURL(new Blob([out],{type:'application/json'}));
   a.download=name+'-cabinet-export.json';a.click();URL.revokeObjectURL(a.href);
+  try{if(folder.job&&folder.job.business_id){await sb.from('cabinet_exports').insert({business_id:folder.job.business_id,job_id:jobId,manifest});}}catch(e){}
 }
 
+async function loadSched(){
+  const {data:sp}=await sb.from('schedule_proposals').select('id,job_id,proposed_start,proposed_end,state,created_by').neq('state','canceled').order('proposed_start');
+  const jm=jmap();
+  const label={owner_plan:'your plan',proposed:'proposed to customer',customer_confirmed:'customer confirmed',declined:'declined'};
+  $('sched').innerHTML=(sp&&sp.length)?sp.map(x=>{
+    const when=x.proposed_start?new Date(x.proposed_start).toLocaleString():'no time recorded';
+    const next=x.state==='owner_plan'?'<button class="ghost" data-act="proposed" data-id="'+x.id+'">mark proposed</button>':x.state==='proposed'?'<button class="ghost" data-act="customer_confirmed" data-id="'+x.id+'">customer confirmed</button>':'';
+    return `<div class="line">${esc(jm[x.job_id]||'(no job)')} - ${esc(when)} <span class="badge${x.state==='customer_confirmed'?' warn':''}">${esc(label[x.state]||x.state)}</span> <span class="row" style="display:inline-flex;margin-left:8px">${next}<button class="ghost" data-act="declined" data-id="${x.id}">declined</button></span>`;
+  }).join(''):'<span class="muted">Nothing scheduled.</span>';
+  $('sched').querySelectorAll('button').forEach(b=>b.onclick=()=>schedAction(b));
+}
+async function schedAction(b){
+  b.disabled=true;
+  await sb.from('schedule_proposals').update({state:b.dataset.act,updated_at:new Date().toISOString()}).eq('id',b.dataset.id);
+  await loadSched();
+}
+$('addplan').onclick=async()=>{
+  const t=$('schedstart').value;if(!t)return;
+  const {data:mem}=await sb.from('business_members').select('business_id').limit(1).single();
+  await sb.from('schedule_proposals').insert({business_id:mem.business_id,job_id:$('schedjob').value||null,proposed_start:new Date(t).toISOString(),state:'owner_plan',created_by:'owner-cabinet-ui'});
+  $('schedstart').value='';await loadSched();
+};
+$('addquote').onclick=async()=>{
+  const raw=$('quoteamt').value.trim();
+  const cents=raw?Math.round(parseFloat(raw.replace(/[^0-9.]/g,''))*100):null;
+  const {data:mem}=await sb.from('business_members').select('business_id').limit(1).single();
+  await sb.from('cabinet_quotes').insert({business_id:mem.business_id,job_id:$('quotejob').value||null,amount_cents:Number.isFinite(cents)?cents:null,state:'open'});
+  $('quoteamt').value='';await loadMoney();
+};
+
 async function loadWarranty(){
-  const {data:warr}=await sb.from('warranty_records').select('id,job_id,item,installed_at,term_text,state').order('installed_at',{ascending:false});
+  const {data:warr}=await sb.from('warranty_records').select('id,job_id,item,installed_at,term_text,notes,state').order('installed_at',{ascending:false});
   const jm=jmap();
   $('warranty').innerHTML=(warr&&warr.length)?warr.map(w=>
-    `<div class="card"><b>${esc(w.item)}</b> - ${esc(jm[w.job_id]||'(no job)')}<br><span class="muted">installed ${esc(w.installed_at||'date not recorded')} - ${esc(w.term_text||'term not recorded')}</span> <span class="badge">${esc(w.state)}</span></div>`
+    `<div class="card"><b>${esc(w.item)}</b> - ${esc(jm[w.job_id]||'(no job)')} <span class="badge">${esc(w.state)}</span><br><span class="muted">installed ${esc(w.installed_at||'date not recorded')} - ${esc(w.term_text||'term not recorded')}</span>${w.notes?`<br><span class="muted">${esc(w.notes)}</span>`:''}<br><span class="row" style="margin-top:6px">${w.state==='active'?`<button class="ghost" data-wact="claimed" data-id="${w.id}">mark claimed</button><button class="ghost" data-wact="expired" data-id="${w.id}">mark expired</button><button class="ghost" data-wact="void" data-id="${w.id}">void</button>`:''}</span></div>`
   ).join(''):'<span class="muted">None recorded.</span>';
+  $('warranty').querySelectorAll('button').forEach(b=>b.onclick=async()=>{b.disabled=true;await sb.from('warranty_records').update({state:b.dataset.wact,updated_at:new Date().toISOString()}).eq('id',b.dataset.id);await loadWarranty();});
 }
 
 init();
