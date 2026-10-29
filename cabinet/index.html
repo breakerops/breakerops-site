@@ -113,7 +113,7 @@ const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money=c=>c==null?'no price recorded':'$'+(c/100).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
 const daysSince=t=>Math.floor((Date.now()-new Date(t))/864e5);
-const STALL_DAYS=3;
+let STALL_DAYS=+(localStorage.getItem('stallDays')||28); // owner-set; F1408 documents 28 days
 
 let d={}; // all loaded data
 const jmap=()=>Object.fromEntries((d.jobs||[]).map(j=>[j.id,j.title]));
@@ -176,9 +176,11 @@ function render(){
   $('needs').querySelectorAll('[data-dact]').forEach(b=>b.onclick=()=>draftAction(b));
 
   const st=stalled();
-  $('nudge').innerHTML = st.length
-    ? `<h2>Worth a nudge</h2>`+st.map(x=>`<div class="row"><span class="what">${esc(jobName(x.job_id)||'A customer')} - ${money(x.amount_cents)}</span><span class="meta">Quoted ${daysSince(x.quoted_at)} days ago, no answer yet.</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Mark nudged</button></span></div>`).join('')
-    : '';
+  $('nudge').innerHTML = `<h2>Worth a nudge</h2><span class="quiet">One reminder after ${STALL_DAYS} quiet days. <button id="stallcfg" style="margin:0;font-size:13px">change</button></span>`+(st.length?st.map(x=>`<div class="row"><span class="what">${esc(jobName(x.job_id)||'A customer')} - ${money(x.amount_cents)}</span><span class="meta">Quoted ${daysSince(x.quoted_at)} days ago, no answer yet.</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Mark nudged</button></span></div>`).join(''):'');
+  $('stallcfg').onclick=()=>{
+    const v=prompt('Remind me about an unanswered quote after how many days?',String(STALL_DAYS));
+    const n=parseInt(v,10);if(Number.isFinite(n)&&n>0&&n<365){STALL_DAYS=n;localStorage.setItem('stallDays',String(n));render();}
+  };
   $('nudge').querySelectorAll('[data-nact]').forEach(b=>b.onclick=()=>quoteAction(b));
 
   // Money detail
