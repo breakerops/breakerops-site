@@ -4,6 +4,7 @@
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
 <title>Cabinet - BreakerOps</title>
+<meta name="robots" content="noindex,nofollow">
 <link rel="stylesheet" href="/assets/css/styles.css">
 <style>
 body{font-family:system-ui,sans-serif;max-width:760px;margin:0 auto;padding:16px;background:#0b0e14;color:#e8eaed}
@@ -11,10 +12,14 @@ h1{font-size:1.3rem} h2{font-size:1.05rem;margin:1.4em 0 .4em}
 .card{background:#151a24;border:1px solid #262d3a;border-radius:10px;padding:12px 14px;margin:.5em 0}
 .muted{color:#9aa3b2;font-size:.85rem}
 button{background:#2f6fed;color:#fff;border:0;border-radius:8px;padding:8px 14px;font-size:.9rem;cursor:pointer}
+button.ghost{background:transparent;border:1px solid #2a3242;color:#9aa3b2;padding:4px 10px;font-size:.8rem}
 input,select{background:#0f1420;color:#e8eaed;border:1px solid #2a3242;border-radius:8px;padding:7px 10px;font-size:.9rem}
 .row{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
 .badge{font-size:.72rem;padding:2px 8px;border-radius:999px;background:#223;border:1px solid #345}
+.badge.warn{background:#3a2c14;border-color:#6b5320;color:#f0c877}
 a{color:#7da7ff}
+.line{padding:6px 0;border-bottom:1px solid #1d2330}
+.line:last-child{border-bottom:0}
 </style>
 </head>
 <body>
@@ -22,12 +27,17 @@ a{color:#7da7ff}
 <p class="muted" id="who">Loading...</p>
 
 <h2>Money</h2>
-<div class="card" id="money-unbilled"><span class="muted">Loading...</span></div>
 <div class="card" id="money-invoices"></div>
 <div class="card" id="money-quotes"></div>
+<div class="card" id="money-unbilled"></div>
+<div class="card" id="money-renewals"></div>
 
 <h2>Open questions</h2>
 <div class="card" id="queue"><span class="muted">None.</span></div>
+
+<h2>Drafts waiting on your yes</h2>
+<p class="muted">Nothing here sends by itself. Approving only marks the draft approved; sending stays off until you say so.</p>
+<div class="card" id="drafts"><span class="muted">None waiting.</span></div>
 
 <h2>Jobs</h2>
 <div class="row" style="margin:.4em 0">
@@ -37,10 +47,10 @@ a{color:#7da7ff}
 </div>
 <div id="jobs"></div>
 
-<h2>Warranty</h2>
+<h2>Warranty cards</h2>
 <div id="warranty"><span class="muted">None recorded.</span></div>
 
-<p class="muted" style="margin-top:2em">Cabinet records come from your texts. Nothing here is sent to customers. Exports are private to you.</p>
+<p class="muted" style="margin-top:2em">Cabinet records come from your texts. Nothing here is sent to customers. Exports download to your device only.</p>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -50,6 +60,12 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money=c=>c==null?'no price recorded':'$'+(c/100).toFixed(2);
+const daysSince=t=>Math.floor((Date.now()-new Date(t))/864e5);
+const STALL_DAYS=3; // owner-configurable later; research default is one gentle nudge after a stall
+
+let jobs=[],custs=[];
+const jmap=()=>Object.fromEntries(jobs.map(j=>[j.id,j.title]));
+const cmap=()=>Object.fromEntries(custs.map(c=>[c.id,c.name]));
 
 async function init(){
   const {data:{session}}=await sb.auth.getSession();
@@ -59,92 +75,135 @@ async function init(){
 }
 
 async function loadAll(){
-  const [{data:jobs},{data:extras},{data:invoices},{data:queue},{data:warr},{data:custs}]=await Promise.all([
+  const [{data:j},{data:c}]=await Promise.all([
     sb.from('cabinet_jobs').select('id,title,status,customer_id').order('created_at'),
-    sb.from('unbilled_extras').select('id,job_id,description,amount_cents,state,customer_authorization').order('created_at',{ascending:false}),
-    sb.from('cabinet_invoices').select('id,job_id,amount_cents,issued_at,due_at,state').order('due_at'),
-    sb.from('resolution_queue').select('id,question,options,status').eq('status','open'),
-    sb.from('warranty_records').select('id,job_id,item,installed_at,term_text,state').order('installed_at',{ascending:false}),
-    sb.from('cabinet_customers').select('id,name'),
-  ]);
-  const jmap=Object.fromEntries((jobs||[]).map(j=>[j.id,j.title]));
-  const cmap=Object.fromEntries((custs||[]).map(c=>[c.id,c.name]));
+    sb.from('cabinet_customers').select('id,name')]);
+  jobs=j||[];custs=c||[];
+  await Promise.all([loadMoney(),loadQueue(),loadDrafts(),loadJobs(),loadWarranty()]);
+}
 
-  const ub=(extras||[]).filter(e=>e.state!=='invoiced'&&e.state!=='voided');
-  $('money-unbilled').innerHTML='<b>Unbilled extras</b><br>'+(ub.length?ub.map(e=>
-    `<div>${esc(jmap[e.job_id]||'(unresolved job)')} - ${esc(e.description)} - ${money(e.amount_cents)} <span class="badge">${esc(e.state)}</span> <span class="badge">customer approval: ${esc(e.customer_authorization)}</span></div>`
-  ).join(''):'<span class="muted">None.</span>');
+async function loadMoney(){
+  const [{data:invoices},{data:pays},{data:quotes},{data:extras}]=await Promise.all([
+    sb.from('cabinet_invoices').select('id,job_id,amount_cents,issued_at,due_at,state').order('due_at'),
+    sb.from('payment_observations').select('id,invoice_id,amount_cents,source,note').order('observed_at',{ascending:false}),
+    sb.from('cabinet_quotes').select('id,job_id,customer_id,amount_cents,state,quoted_at,nudge_count').order('quoted_at'),
+    sb.from('unbilled_extras').select('id,job_id,description,amount_cents,state,customer_authorization').order('created_at',{ascending:false})]);
+  const jm=jmap(),cm=cmap();
+  const payByInv={};(pays||[]).forEach(p=>{(payByInv[p.invoice_id]=payByInv[p.invoice_id]||[]).push(p);});
 
   const open=(invoices||[]).filter(i=>i.state==='open');
   $('money-invoices').innerHTML='<b>Who owes you</b><br>'+(open.length?open.map(i=>{
-    const days=i.due_at?Math.floor((Date.now()-new Date(i.due_at))/864e5):null;
-    return `<div>${esc(jmap[i.job_id]||'(no job)')} - ${money(i.amount_cents)}${days!=null&&days>0?` <span class="badge">${days}d out</span>`:''}</div>`;
+    const days=i.due_at?daysSince(i.due_at):null;
+    const obs=(payByInv[i.id]||[]).map(p=>`<div class="muted">heard ${esc(p.source==='owner_reported'?'from you':'from '+p.source)}${p.amount_cents!=null?': '+money(p.amount_cents):''}${p.note?' - '+esc(p.note):''}</div>`).join('');
+    return `<div class="line">${esc(jm[i.job_id]||'(no job)')} - ${money(i.amount_cents)}${days!=null&&days>0?` <span class="badge warn">${days}d out</span>`:''}${obs}</div>`;
   }).join(''):'<span class="muted">No open invoices recorded.</span>');
 
-  $('money-quotes').innerHTML='<b>Open quotes / follow-ups</b><br><span class="muted">Quote tracking lands in a later slice; stall flags are not built yet.</span>';
+  const openQ=(quotes||[]).filter(q=>q.state==='open');
+  $('money-quotes').innerHTML='<b>Open quotes</b><br>'+(openQ.length?openQ.map(q=>{
+    const age=daysSince(q.quoted_at);
+    const stall=age>=STALL_DAYS&&q.nudge_count<1;
+    return `<div class="line">${esc(jm[q.job_id]||cm[q.customer_id]||'(no job)')} - ${money(q.amount_cents)} <span class="badge">${age}d old</span>${stall?' <span class="badge warn">sitting - one gentle nudge?</span>':''}${q.nudge_count?` <span class="badge">nudged ${q.nudge_count}x</span>`:''}
+      <span class="row" style="display:inline-flex;margin-left:8px"><button class="ghost" data-act="nudge" data-id="${q.id}" data-n="${q.nudge_count}">mark nudged</button><button class="ghost" data-act="won" data-id="${q.id}">won</button><button class="ghost" data-act="lost" data-id="${q.id}">lost</button></span></div>`;
+  }).join(''):'<span class="muted">No open quotes recorded.</span>');
+  $('money-quotes').querySelectorAll('button').forEach(b=>b.onclick=()=>quoteAction(b));
 
-  $('queue').innerHTML=(queue&&queue.length)?queue.map(q=>{
-    const opts=(q.options||[]).map(o=>`<button data-res="${q.id}" data-job="${o.job_id}">${esc(o.title)}</button>`).join(' ');
-    return `<div>${esc(q.question)} ${opts||'<span class="muted">(no candidates - reply by text)</span>'}</div>`;
-  }).join(''):'<span class="muted">None.</span>';
+  const ub=(extras||[]).filter(e=>e.state!=='invoiced'&&e.state!=='voided');
+  $('money-unbilled').innerHTML='<b>Unbilled extras</b><br>'+(ub.length?ub.map(e=>{
+    const next=e.state==='recorded'?'<button class="ghost" data-act="priced" data-id="'+e.id+'">mark priced</button>':e.state==='priced'?'<button class="ghost" data-act="approved" data-id="'+e.id+'">approve</button>':e.state==='approved'?'<button class="ghost" data-act="invoiced" data-id="'+e.id+'">mark billed</button>':'';
+    return `<div class="line">${esc(jm[e.job_id]||'(unresolved job)')} - ${esc(e.description)} - ${money(e.amount_cents)} <span class="badge">${esc(e.state)}</span> <span class="badge">customer approval: ${esc(e.customer_authorization)}</span> <span class="row" style="display:inline-flex;margin-left:8px">${next}<button class="ghost" data-act="voided" data-id="${e.id}">void</button></span></div>`;
+  }).join(''):'<span class="muted">None.</span>');
+  $('money-unbilled').querySelectorAll('button').forEach(b=>b.onclick=()=>extraAction(b));
 
-  $('jobs').innerHTML=(jobs||[]).map(j=>
-    `<div class="card"><b>${esc(j.title)}</b> <span class="badge">${esc(j.status)}</span>${j.customer_id?` <span class="muted">${esc(cmap[j.customer_id]||'')}</span>`:''} <button data-exp="${j.id}" data-title="${esc(j.title)}">Export</button></div>`
-  ).join('')||'<span class="muted">No jobs yet.</span>';
-
-  $('warranty').innerHTML=(warr&&warr.length)?warr.map(w=>
-    `<div>${esc(jmap[w.job_id]||'')} - ${esc(w.item)} - term: ${w.term_text?esc(w.term_text):'term not recorded'} <span class="badge">${esc(w.state)}</span></div>`
-  ).join(''):'<span class="muted">None recorded.</span>';
-
-  document.querySelectorAll('[data-res]').forEach(b=>b.onclick=async()=>{
-    await sb.from('resolution_queue').update({status:'resolved',resolution:{job_id:b.dataset.job},resolved_at:new Date().toISOString()}).eq('id',b.dataset.res);
-    await loadAll();
-  });
-  document.querySelectorAll('[data-exp]').forEach(b=>b.onclick=()=>exportJob(b.dataset.exp,b.dataset.title));
+  $('money-renewals').innerHTML='<b>Renewals</b><br><span class="muted">Renewal dates you text us (panel cycles, service plans, certificates) land here with their due dates.</span>';
 }
 
-async function exportJob(jobId,title){
-  const [job,extras,inv,pay,warr,sched,msgs]=await Promise.all([
-    sb.from('cabinet_jobs').select('*').eq('id',jobId).single(),
+async function quoteAction(b){
+  const id=b.dataset.id;b.disabled=true;
+  if(b.dataset.act==='nudge'){await sb.from('cabinet_quotes').update({nudge_count:+b.dataset.n+1,updated_at:new Date().toISOString()}).eq('id',id);}
+  else{await sb.from('cabinet_quotes').update({state:b.dataset.act,updated_at:new Date().toISOString()}).eq('id',id);}
+  await loadMoney();
+}
+async function extraAction(b){
+  const id=b.dataset.id;b.disabled=true;
+  await sb.from('unbilled_extras').update({state:b.dataset.act,updated_at:new Date().toISOString()}).eq('id',id);
+  await loadMoney();
+}
+
+async function loadQueue(){
+  const {data:queue}=await sb.from('resolution_queue').select('id,question,options,status').eq('status','open');
+  $('queue').innerHTML=(queue&&queue.length)?queue.map(q=>{
+    const opts=(q.options||[]).map((o,i)=>`<button class="ghost" data-q="${q.id}" data-i="${i}">${esc(o.title||o.label||('option '+(i+1)))}</button>`).join(' ');
+    return `<div class="line">${esc(q.question)}<br><span class="row">${opts}</span></div>`;
+  }).join(''):'<span class="muted">None.</span>';
+  $('queue').querySelectorAll('button').forEach(b=>b.onclick=()=>resolveQueue(b));
+}
+async function resolveQueue(b){
+  b.disabled=true;
+  const {data:rows}=await sb.from('resolution_queue').select('options').eq('id',b.dataset.q);
+  const opt=(rows&&rows[0]&&rows[0].options||[])[+b.dataset.i]||null;
+  await sb.from('resolution_queue').update({status:'resolved',resolution:{chosen:opt},resolved_at:new Date().toISOString()}).eq('id',b.dataset.q);
+  await loadQueue();
+}
+
+async function loadDrafts(){
+  const {data:drafts}=await sb.from('outbound_drafts').select('id,kind,job_id,recipient,body,state,version').in('state',['draft','approved']).order('created_at',{ascending:false});
+  $('drafts').innerHTML=(drafts&&drafts.length)?drafts.map(d=>
+    `<div class="line"><span class="badge">${esc(d.kind)}</span> <span class="badge">${esc(d.state)}${d.state==='approved'?' v'+d.version:''}</span> to ${esc(d.recipient)}<br>${esc(d.body)}<br><span class="row">${d.state==='draft'?`<button class="ghost" data-act="approved" data-id="${d.id}" data-v="${d.version}">approve these exact words</button>`:''}<button class="ghost" data-act="canceled" data-id="${d.id}">${d.state==='draft'?'reject':'cancel'}</button></span></div>`
+  ).join(''):'<span class="muted">None waiting.</span>';
+  $('drafts').querySelectorAll('button').forEach(b=>b.onclick=()=>draftAction(b));
+}
+async function draftAction(b){
+  b.disabled=true;
+  const upd=b.dataset.act==='approved'
+    ?{state:'approved',approved_version:+b.dataset.v,approved_by:(await sb.auth.getUser()).data.user.id,approved_at:new Date().toISOString(),updated_at:new Date().toISOString()}
+    :{state:'canceled',updated_at:new Date().toISOString()};
+  await sb.from('outbound_drafts').update(upd).eq('id',b.dataset.id);
+  await loadDrafts();
+}
+
+async function loadJobs(){
+  $('jobs').innerHTML=jobs.length?jobs.map(j=>{
+    const cust=cmap()[j.customer_id];
+    return `<div class="card"><b>${esc(j.title)}</b>${cust?` <span class="muted">- ${esc(cust)}</span>`:''} <span class="badge">${esc(j.status)}</span> <button class="ghost" data-export="${j.id}">export folder</button></div>`;
+  }).join(''):'<span class="muted">No jobs yet. Text us one.</span>';
+  $('jobs').querySelectorAll('[data-export]').forEach(b=>b.onclick=()=>exportJob(b.dataset.export));
+}
+$('addjob').onclick=async()=>{
+  const t=$('newjob').value.trim();if(!t)return;
+  const cn=$('newcust').value.trim();let cid=null;
+  const {data:mem}=await sb.from('business_members').select('business_id').limit(1).single();
+  if(cn){const {data:c}=await sb.from('cabinet_customers').insert({name:cn,business_id:mem.business_id}).select('id');cid=c&&c[0]&&c[0].id;}
+  await sb.from('cabinet_jobs').insert({title:t,customer_id:cid,business_id:mem.business_id});
+  $('newjob').value='';$('newcust').value='';await loadJobs();
+};
+
+async function exportJob(jobId){
+  const [job,extras,invoices,quotes,warr,drafts,pays]=await Promise.all([
+    sb.from('cabinet_jobs').select('*').eq('id',jobId),
     sb.from('unbilled_extras').select('*').eq('job_id',jobId),
     sb.from('cabinet_invoices').select('*').eq('job_id',jobId),
-    sb.from('payment_observations').select('*'),
+    sb.from('cabinet_quotes').select('*').eq('job_id',jobId),
     sb.from('warranty_records').select('*').eq('job_id',jobId),
-    sb.from('schedule_proposals').select('*').eq('job_id',jobId),
-    sb.from('inbound_messages').select('id,from_phone,body,received_at'),
-  ]);
-  const manifest={
-    exported_at:new Date().toISOString(),
-    job:job.data,
-    unbilled_extras:extras.data,
-    invoices:inv.data,
-    payment_observations:(pay.data||[]).filter(p=>(inv.data||[]).some(i=>i.id===p.invoice_id)),
-    warranty_records:warr.data,
-    schedule_proposals:sched.data,
-    source_message_ids:[...new Set([...(extras.data||[]),...(warr.data||[]),...(sched.data||[])].map(r=>r.source_ref).filter(Boolean))],
-    note:'Private export. Owner-only. Includes full source references; texts are never auto-deleted.'
-  };
-  await sb.from('cabinet_exports').insert({business_id:job.data.business_id,job_id:jobId,manifest});
-  const blob=new Blob([JSON.stringify(manifest,null,2)],{type:'application/json'});
-  const a=document.createElement('a');a.href=URL.createObjectURL(blob);
-  a.download='breakerops-export-'+(title||'job').replace(/[^a-z0-9]+/gi,'-')+'.json';a.click();
+    sb.from('outbound_drafts').select('*').eq('job_id',jobId),
+    sb.from('payment_observations').select('*')]);
+  const invIds=new Set((invoices.data||[]).map(i=>i.id));
+  const refs=[...new Set([...(extras.data||[]),...(invoices.data||[]),...(quotes.data||[]),...(warr.data||[]),...(drafts.data||[])].map(r=>r.source_ref).filter(Boolean))];
+  const {data:msgs}=refs.length?await sb.from('inbound_messages').select('*').in('id',refs):{data:[]};
+  const folder={exported_at:new Date().toISOString(),job:(job.data||[])[0]||null,extras:extras.data||[],invoices:invoices.data||[],quotes:quotes.data||[],warranty:warr.data||[],drafts:drafts.data||[],source_messages:msgs||[],payment_observations:(pays.data||[]).filter(p=>invIds.has(p.invoice_id))};
+  try{await sb.from('cabinet_exports').insert({business_id:folder.job.business_id,job_id:jobId,manifest:{recorded_by:'owner-export-button',counts:{extras:folder.extras.length,invoices:folder.invoices.length,quotes:folder.quotes.length,warranty:folder.warranty.length,drafts:folder.drafts.length,source_messages:folder.source_messages.length},exported_at:folder.exported_at}});}catch(e){}
+  const name=((folder.job&&folder.job.title)||'job').replace(/[^a-z0-9]+/gi,'-').toLowerCase();
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([JSON.stringify(folder,null,2)],{type:'application/json'}));
+  a.download=name+'-cabinet-export.json';a.click();URL.revokeObjectURL(a.href);
 }
 
-document.getElementById('addjob').onclick=async()=>{
-  const title=$('newjob').value.trim(); if(!title)return;
-  const custName=$('newcust').value.trim();
-  const {data:{session}}=await sb.auth.getSession();
-  const {data:mem}=await sb.from('business_members').select('business_id').limit(1).single();
-  if(!mem){alert('No business membership found.');return;}
-  let custId=null;
-  if(custName){
-    const {data:c}=await sb.from('cabinet_customers').insert({business_id:mem.business_id,name:custName}).select('id').single();
-    custId=c?.id||null;
-  }
-  await sb.from('cabinet_jobs').insert({business_id:mem.business_id,title,customer_id:custId});
-  $('newjob').value='';$('newcust').value='';
-  await loadAll();
-};
+async function loadWarranty(){
+  const {data:warr}=await sb.from('warranty_records').select('id,job_id,item,installed_at,term_text,state').order('installed_at',{ascending:false});
+  const jm=jmap();
+  $('warranty').innerHTML=(warr&&warr.length)?warr.map(w=>
+    `<div class="card"><b>${esc(w.item)}</b> - ${esc(jm[w.job_id]||'(no job)')}<br><span class="muted">installed ${esc(w.installed_at||'date not recorded')} - ${esc(w.term_text||'term not recorded')}</span> <span class="badge">${esc(w.state)}</span></div>`
+  ).join(''):'<span class="muted">None recorded.</span>';
+}
 
 init();
 </script>
