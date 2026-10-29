@@ -353,3 +353,28 @@ grant select, insert on public.cabinet_history, public.inbound_messages, public.
 grant execute on function public.webhook_config(text) to service_role;
 
 grant select on public.sms_opt_outs to service_role; -- opt-out check needs it
+
+-- 17. quotes (money view open-quote list; stall flag is a UI concern over quoted_at + nudge_count)
+create table if not exists public.cabinet_quotes (
+  id uuid primary key default gen_random_uuid(),
+  business_id uuid not null references public.businesses(id),
+  job_id uuid references public.cabinet_jobs(id),
+  customer_id uuid references public.cabinet_customers(id),
+  amount_cents int,          -- null when never priced; never invented
+  state text not null default 'open', -- open|won|lost|expired
+  quoted_at timestamptz not null default now(),
+  nudge_count int not null default 0, -- owner-set default is one gentle nudge
+  source_ref uuid references public.inbound_messages(id),
+  version int not null default 1,
+  created_at timestamptz not null default now(),
+  updated_at timestamptz not null default now()
+);
+alter table public.cabinet_quotes enable row level security;
+drop policy if exists member_select on public.cabinet_quotes;
+drop policy if exists member_insert on public.cabinet_quotes;
+drop policy if exists member_update on public.cabinet_quotes;
+create policy member_select on public.cabinet_quotes for select using (public.is_member(business_id));
+create policy member_insert on public.cabinet_quotes for insert with check (public.is_member(business_id));
+create policy member_update on public.cabinet_quotes for update using (public.is_member(business_id));
+grant select, insert, update on public.cabinet_quotes to service_role;
+grant select, insert, update on public.cabinet_quotes to authenticated;
