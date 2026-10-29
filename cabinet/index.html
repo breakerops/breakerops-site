@@ -112,6 +112,7 @@ const sb=supabase.createClient(SB_URL,SB_KEY);
 const $=id=>document.getElementById(id);
 const esc=s=>String(s??'').replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c]));
 const money=c=>c==null?'no price recorded':'$'+(c/100).toLocaleString(undefined,{minimumFractionDigits:0,maximumFractionDigits:2});
+const daysWord=d=>d+' '+(d===1?'day':'days');
 const daysSince=t=>Math.floor((Date.now()-new Date(t))/864e5);
 let STALL_DAYS=+(localStorage.getItem('stallDays')||28); // owner-set; F1408 documents 28 days
 
@@ -176,7 +177,7 @@ function render(){
   $('needs').querySelectorAll('[data-dact]').forEach(b=>b.onclick=()=>draftAction(b));
 
   const st=stalled();
-  $('nudge').innerHTML = `<h2>Worth a nudge</h2><span class="quiet">One reminder after ${STALL_DAYS} quiet days. <button id="stallcfg" style="margin:0;font-size:13px">change</button></span>`+(st.length?st.map(x=>`<div class="row"><span class="what">${esc(jobName(x.job_id)||'A customer')} - ${money(x.amount_cents)}</span><span class="meta">Quoted ${daysSince(x.quoted_at)} days ago, no answer yet.</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Mark nudged</button></span></div>`).join(''):'');
+  $('nudge').innerHTML = `<h2>Worth a nudge</h2><span class="quiet">One reminder after ${STALL_DAYS} quiet days. <button id="stallcfg" style="margin:0;font-size:13px">change</button></span>`+(st.length?st.map(x=>`<div class="row"><span class="what">${esc(jobName(x.job_id)||'A customer')} - ${money(x.amount_cents)}</span><span class="meta">Quoted ${daysWord(daysSince(x.quoted_at))} ago, no answer yet.</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Nudged</button></span></div>`).join(''):'');
   $('stallcfg').onclick=()=>{
     const v=prompt('Remind me about an unanswered quote after how many days?',String(STALL_DAYS));
     const n=parseInt(v,10);if(Number.isFinite(n)&&n>0&&n<365){STALL_DAYS=n;localStorage.setItem('stallDays',String(n));render();}
@@ -192,7 +193,7 @@ function render(){
     return `<div class="row"><span class="what">${esc(jobName(i.job_id)||'(no job)')} - ${money(i.amount_cents)}</span><span class="meta">${days!=null&&days>0?days+' days out':'not due yet'}</span>${obs}</div>`;
   }).join('');}
   const oq=openQuotes();
-  if(oq.length){m+=oq.map(x=>`<div class="row"><span class="what">Quote: ${esc(jobName(x.job_id||x.customer_id)||'(no job)')} - ${money(x.amount_cents)}</span><span class="meta">${daysSince(x.quoted_at)} days old${x.nudge_count?', nudged '+x.nudge_count+'x':''}</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Mark nudged</button><button data-nact="won" data-id="${x.id}">Won</button><button data-nact="lost" data-id="${x.id}">Lost</button></span></div>`).join('');}
+  if(oq.length){m+=oq.map(x=>`<div class="row"><span class="what">Quote: ${esc(jobName(x.job_id||x.customer_id)||'(no job)')} - ${money(x.amount_cents)}</span><span class="meta">${daysWord(daysSince(x.quoted_at))} old${x.nudge_count?', nudged '+x.nudge_count+'x':''}</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Nudged</button><button data-nact="won" data-id="${x.id}">Won</button><button data-nact="lost" data-id="${x.id}">Lost</button></span></div>`).join('');}
   const ub=unbilled();
   if(ub.length){m+=ub.map(e=>{
     const next=e.state==='recorded'?'<button data-eact="priced" data-id="'+e.id+'">Priced</button>':e.state==='priced'?'<button data-eact="approved" data-id="'+e.id+'">Approve</button>':e.state==='approved'?'<button data-eact="invoiced" data-id="'+e.id+'">Billed</button>':'';
@@ -211,7 +212,7 @@ function render(){
   // Schedule
   const label={owner_plan:'your plan',proposed:'proposed to customer',customer_confirmed:'confirmed by customer',declined:'declined'};
   $('sched').innerHTML=(d.sched&&d.sched.length)?d.sched.map(x=>{
-    const when=x.proposed_start?new Date(x.proposed_start).toLocaleString():'no time recorded';
+    const when=x.proposed_start?new Date(x.proposed_start).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'no time recorded';
     const next=x.state==='owner_plan'?'<button data-sact="proposed" data-id="'+x.id+'">Mark proposed</button>':x.state==='proposed'?'<button data-sact="customer_confirmed" data-id="'+x.id+'">Customer confirmed</button>':'';
     return `<div class="row"><span class="what">${esc(jobName(x.job_id)||'')} - ${esc(when)}</span><span class="meta">${esc(label[x.state]||x.state)}</span><span>${next}<button data-sact="declined" data-id="${x.id}">Declined</button></span></div>`;
   }).join(''):'<span class="quiet">Nothing scheduled.</span>';
@@ -219,7 +220,7 @@ function render(){
 
   // Warranty
   $('warranty').innerHTML=(d.warr&&d.warr.length)?d.warr.map(w=>
-    `<div class="row"><span class="what">${esc(w.item)} - ${esc(jobName(w.job_id)||'')}</span><span class="meta">installed ${esc(w.installed_at||'date not recorded')} - ${esc(w.term_text||'term not recorded')} - ${esc(w.state)}</span><span>${w.state==='active'?`<button data-wact="claimed" data-id="${w.id}">Claimed</button><button data-wact="expired" data-id="${w.id}">Expired</button><button data-wact="void" data-id="${w.id}">Void</button>`:''}</span></div>`
+    `<div class="row"><span class="what">${esc(w.item)} - ${esc(jobName(w.job_id)||'')}</span><span class="meta">installed ${w.installed_at?new Date(w.installed_at+'T00:00:00').toLocaleDateString(undefined,{month:'short',day:'numeric',year:'numeric'}):'date not recorded'} - ${esc(w.term_text||'term not recorded')} - ${esc(w.state)}</span><span>${w.state==='active'?`<button data-wact="claimed" data-id="${w.id}">Claimed</button><button data-wact="expired" data-id="${w.id}">Expired</button><button data-wact="void" data-id="${w.id}">Void</button>`:''}</span></div>`
   ).join(''):'<span class="quiet">None recorded.</span>';
   $('warranty').querySelectorAll('[data-wact]').forEach(b=>b.onclick=async()=>{b.disabled=true;await sb.from('warranty_records').update({state:b.dataset.wact,updated_at:new Date().toISOString()}).eq('id',b.dataset.id);await loadData();});
 }
