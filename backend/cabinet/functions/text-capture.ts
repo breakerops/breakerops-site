@@ -38,7 +38,7 @@ async function cfg(sb: any, key: string): Promise<string> {
   return cfgCache[key];
 }
 
-const PARSER_VERSION = 'parse-v2';
+const PARSER_VERSION = 'parse-v3';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -79,7 +79,16 @@ async function verifyTelnyx(req: Request, raw: string, pubKey: string): Promise<
 // times are stored raw and parsed only when Date.parse is sure; the raw text
 // always survives in message_parses.output.
 function parse(body: string) {
-  let m = body.match(/^\s*quot(?:e|ed)\s+([^,]+?)\s*,\s*\$?(\d+(?:\.\d{1,2})?)\s*$/i);
+  let m = body.match(/^\s*(?:what|how much)\s+does\s+(.+?)\s+owe(?:\s+me)?\s*\??\s*$/i)
+       || body.match(/^\s*what(?:'s| is)\s+owed\s+(?:on|for)\s+(.+?)\s*\??\s*$/i);
+  if (m) {
+    return {
+      kind: 'money_query',
+      output: { job_hint: m[1].trim() },
+      confidence: 0.7,
+    };
+  }
+  m = body.match(/^\s*quot(?:e|ed)\s+([^,]+?)\s*,\s*\$?(\d+(?:\.\d{1,2})?)\s*$/i);
   if (m) {
     return {
       kind: 'quote',
@@ -209,7 +218,7 @@ serve(async (req) => {
   //    One match -> file the record. Zero or many -> persist the capture and
   //    ask ONE question; never guess, never duplicate a job.
   let outcome: any = { kind: parsed.kind };
-  const needsJob = ['extra', 'quote', 'schedule', 'warranty'];
+  const needsJob = ['extra', 'quote', 'schedule', 'warranty', 'money_query'];
   if (needsJob.includes(parsed.kind)) {
     const hint = (parsed.output.job_hint as string).toLowerCase();
     const { data: jobs } = await sb
@@ -243,6 +252,20 @@ serve(async (req) => {
           business_id: businessId, job_id: jobId, source_ref: msg.id,
           proposed_start: parsed.output.proposed_start, state: 'owner_plan',
         };
+      } else if (parsed.kind === 'money_query') {
+        // Read-only answer: what is still open on this job. No row created.
+        const { data: invs } = await sb
+          .from('cabinet_invoices')
+          .select('amount_cents')
+          .eq('business_id', businessId)
+          .eq('job_id', jobId)
+          .eq('state', 'open');
+        const total = (invs ?? []).reduce((a: number, i: any) => a + (i.amount_cents ?? 0), 0);
+        outcome = {
+          kind: 'money_answer', job_id: jobId,
+          open_total_cents: total, open_count: (invs ?? []).length,
+          job_title: matches[0].title,
+        };
       } else {
         table = 'warranty_records';
         row = {
@@ -250,14 +273,16 @@ serve(async (req) => {
           item: parsed.output.item, term_text: parsed.output.term_text,
         };
       }
-      const { data: created, error: insErr } = await sb.from(table).insert(row).select('id').single();
-      if (insErr) return json({ error: table + ' commit failed' }, 500);
-      ins = created;
-      await sb.from('cabinet_history').insert({
-        business_id: businessId, entity_table: table, entity_id: created.id,
-        change_kind: 'create', new: parsed.output,
-      });
-      outcome = { kind: parsed.kind + '_recorded', record_id: ins.id, job_id: jobId };
+      if (parsed.kind !== 'money_query') {
+        const { data: created, error: insErr } = await sb.from(table).insert(row).select('id').single();
+        if (insErr) return json({ error: table + ' commit failed' }, 500);
+        ins = created;
+        await sb.from('cabinet_history').insert({
+          business_id: businessId, entity_table: table, entity_id: created.id,
+          change_kind: 'create', new: parsed.output,
+        });
+        outcome = { kind: parsed.kind + '_recorded', record_id: ins.id, job_id: jobId };
+      }
     } else {
       // Ambiguous or unknown job: persist the capture, ask ONE question.
       const { data: res } = await sb.from('resolution_queue').insert({
@@ -274,7 +299,11 @@ serve(async (req) => {
   const reply = optedOut ? null
     : outcome.kind === 'extra_recorded'
       ? `Filed: ${parsed.output.description}${parsed.output.amount_cents != null ? ' $' + (parsed.output.amount_cents / 100).toFixed(2) : ''} unbilled. Nothing sent.`
-      : outcome.kind === 'quote_recorded'
+      : outcome.kind === 'money_answer'
+        ? (outcome.open_count > 0
+            ? `${outcome.job_title} owes $${(outcome.open_total_cents / 100).toFixed(2)} across ${outcome.open_count} open invoice${outcome.open_count > 1 ? 's' : ''}.`
+            : `Nothing open on ${outcome.job_title}.`)
+        : outcome.kind === 'quote_recorded'
         ? `Filed: quote ${parsed.output.amount_cents != null ? '$' + (parsed.output.amount_cents / 100).toFixed(2) : '(no price recorded)'}. Nothing sent.`
         : outcome.kind === 'schedule_recorded'
           ? `Filed on your plan: ${parsed.output.when_text}. Customer side untouched.`
