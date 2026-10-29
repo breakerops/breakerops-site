@@ -335,3 +335,13 @@ end $$;
 -- customer_authorization on unbilled extras (never claimed, never an invoice)
 alter table public.unbilled_extras
   add column if not exists customer_authorization text not null default 'unknown';
+
+-- 15. webhook config reader for edge functions (service role only; private.config
+-- is not PostgREST-exposed). Returns '' for unknown keys, never raises.
+create or replace function public.webhook_config(p_key text) returns text
+language sql stable security definer set search_path=public as $$
+  select coalesce((select value from private.config where key = p_key), '');
+$$;
+revoke all on function public.webhook_config(text) from public;
+revoke all on function public.webhook_config(text) from anon;
+revoke all on function public.webhook_config(text) from authenticated;
