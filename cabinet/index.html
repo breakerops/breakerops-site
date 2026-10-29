@@ -24,6 +24,7 @@ h1{font-size:15px;font-weight:600;color:var(--gray);margin:0 0 40px;letter-spaci
 .hero{margin:0 0 8px}
 .hero .amount{font-size:44px;font-weight:700;letter-spacing:-0.02em;line-height:1.1}
 .hero .sub{color:var(--gray);font-size:15px;margin-top:6px}
+button.sub{display:block;padding:0;cursor:pointer;text-align:left}
 section{margin:44px 0}
 h2{font-size:13px;font-weight:600;color:var(--gray);text-transform:uppercase;letter-spacing:.08em;margin:0 0 14px}
 .row{padding:14px 0;border-bottom:1px solid var(--line)}
@@ -94,6 +95,7 @@ input,select{
 <details>
   <summary>Record a quote</summary>
   <div class="inner">
+    <span class="quiet">Fastest way: text it, like "quote Miller, $400" - it lands here on its own. Or use this form:</span><br>
     <select id="quotejob"></select>
     <input id="quoteamt" placeholder="Amount $" size="8" inputmode="decimal">
     <button id="addquote">Record</button>
@@ -153,8 +155,10 @@ function render(){
   const open=openInvoices();
   const total=open.reduce((a,i)=>a+(i.amount_cents||0),0);
   $('hero').innerHTML = open.length
-    ? `<div class="amount">${money(total)}</div><div class="sub">owed to you across ${open.length} job${open.length>1?'s':''}</div>`
+    ? `<div class="amount">${money(total)}</div><button class="sub" id="herojobs">owed to you across ${open.length} job${open.length>1?'s':''}</button>`
     : `<div class="amount">Nothing outstanding</div><div class="sub">No open invoices right now.</div>`;
+  const hj=$('herojobs');
+  if(hj){hj.onclick=()=>{const det=[...document.querySelectorAll('details')].find(x=>/Jobs/.test(x.querySelector('summary').textContent));if(det){det.open=true;det.scrollIntoView({behavior:'smooth'});}};}
 
   // The one section that asks for a decision
   const items=[];
