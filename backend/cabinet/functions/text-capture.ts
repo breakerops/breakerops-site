@@ -38,7 +38,7 @@ async function cfg(sb: any, key: string): Promise<string> {
   return cfgCache[key];
 }
 
-const PARSER_VERSION = 'parse-v1';
+const PARSER_VERSION = 'parse-v2';
 
 function json(body: unknown, status = 200) {
   return new Response(JSON.stringify(body), {
@@ -69,12 +69,48 @@ async function verifyTelnyx(req: Request, raw: string, pubKey: string): Promise<
   }
 }
 
-// parse-v1: deliberately small. Recognizes an unbilled-extra shape only:
-//   "<job hint>, <what>, $<amount>" e.g. "Miller job, added outlet, $180"
-// Anything else -> unresolved (one question via resolution_queue).
-// Price is captured only when the owner typed it - never invented.
+// parse-v2: still deliberately small. Recognizes four owner-text shapes:
+//   quote:     "quote <job hint>, $<amount>"      e.g. "quote Miller, $400"
+//   schedule:  "plan <job hint>, <when text>"     e.g. "plan Miller, 2026-11-02 08:00"
+//   warranty:  "warranty <job hint>, <item>[, <term>]"
+//   extra:     "<job hint>, <what>[, $<amount>]"  e.g. "Miller job, added outlet, $180"
+// Anything else -> kind 'other' (saved with parse record, nothing filed).
+// Price is captured only when the owner typed it - never invented. Schedule
+// times are stored raw and parsed only when Date.parse is sure; the raw text
+// always survives in message_parses.output.
 function parse(body: string) {
-  const m = body.match(/^\s*([^,]+?)\s*,\s*(.+?)(?:\s*,?\s*\$(\d+(?:\.\d{1,2})?))?\s*$/);
+  let m = body.match(/^\s*quot(?:e|ed)\s+([^,]+?)\s*,\s*\$?(\d+(?:\.\d{1,2})?)\s*$/i);
+  if (m) {
+    return {
+      kind: 'quote',
+      output: { job_hint: m[1].trim(), amount_cents: Math.round(parseFloat(m[2]) * 100) },
+      confidence: 0.7,
+    };
+  }
+  m = body.match(/^\s*(?:plan|schedule)\s+([^,]+?)\s*,\s*(.+?)\s*$/i);
+  if (m) {
+    const whenText = m[2].trim();
+    const t = Date.parse(whenText);
+    const sure = !Number.isNaN(t);
+    return {
+      kind: 'schedule',
+      output: {
+        job_hint: m[1].trim(),
+        when_text: whenText,
+        proposed_start: sure ? new Date(t).toISOString() : null,
+      },
+      confidence: sure ? 0.6 : 0.4,
+    };
+  }
+  m = body.match(/^\s*warranty\s+([^,]+?)\s*,\s*([^,]+?)(?:\s*,\s*(.+?))?\s*$/i);
+  if (m) {
+    return {
+      kind: 'warranty',
+      output: { job_hint: m[1].trim(), item: m[2].trim(), term_text: m[3]?.trim() ?? null },
+      confidence: 0.6,
+    };
+  }
+  m = body.match(/^\s*([^,]+?)\s*,\s*(.+?)(?:\s*,?\s*\$(\d+(?:\.\d{1,2})?))?\s*$/);
   if (!m) return { kind: 'other', output: { raw: body }, confidence: 0 };
   const [, jobHint, what, amount] = m;
   const hasPrice = amount !== undefined;
@@ -170,8 +206,11 @@ serve(async (req) => {
   });
 
   // 5. Resolve job: match hint against open jobs' titles, case-insensitive.
+  //    One match -> file the record. Zero or many -> persist the capture and
+  //    ask ONE question; never guess, never duplicate a job.
   let outcome: any = { kind: parsed.kind };
-  if (parsed.kind === 'extra') {
+  const needsJob = ['extra', 'quote', 'schedule', 'warranty'];
+  if (needsJob.includes(parsed.kind)) {
     const hint = (parsed.output.job_hint as string).toLowerCase();
     const { data: jobs } = await sb
       .from('cabinet_jobs')
@@ -181,25 +220,44 @@ serve(async (req) => {
     const matches = (jobs ?? []).filter((j: any) => j.title.toLowerCase().includes(hint));
 
     if (matches.length === 1) {
-      const { data: extra, error: exErr } = await sb
-        .from('unbilled_extras')
-        .insert({
-          business_id: businessId,
-          job_id: matches[0].id,
-          source_ref: msg.id,
-          description: parsed.output.description,
-          amount_cents: parsed.output.amount_cents,
-          state: 'recorded',
-          customer_authorization: 'unknown',
-        })
-        .select('id')
-        .single();
-      if (exErr) return json({ error: 'extra commit failed' }, 500);
+      const jobId = matches[0].id;
+      let table = '';
+      let row: any = null;
+      let ins: any = null;
+      if (parsed.kind === 'extra') {
+        table = 'unbilled_extras';
+        row = {
+          business_id: businessId, job_id: jobId, source_ref: msg.id,
+          description: parsed.output.description, amount_cents: parsed.output.amount_cents,
+          state: 'recorded', customer_authorization: 'unknown',
+        };
+      } else if (parsed.kind === 'quote') {
+        table = 'cabinet_quotes';
+        row = {
+          business_id: businessId, job_id: jobId, source_ref: msg.id,
+          amount_cents: parsed.output.amount_cents, state: 'open',
+        };
+      } else if (parsed.kind === 'schedule') {
+        table = 'schedule_proposals';
+        row = {
+          business_id: businessId, job_id: jobId, source_ref: msg.id,
+          proposed_start: parsed.output.proposed_start, state: 'owner_plan',
+        };
+      } else {
+        table = 'warranty_records';
+        row = {
+          business_id: businessId, job_id: jobId, source_ref: msg.id,
+          item: parsed.output.item, term_text: parsed.output.term_text,
+        };
+      }
+      const { data: created, error: insErr } = await sb.from(table).insert(row).select('id').single();
+      if (insErr) return json({ error: table + ' commit failed' }, 500);
+      ins = created;
       await sb.from('cabinet_history').insert({
-        business_id: businessId, entity_table: 'unbilled_extras', entity_id: extra.id,
+        business_id: businessId, entity_table: table, entity_id: created.id,
         change_kind: 'create', new: parsed.output,
       });
-      outcome = { kind: 'extra_recorded', extra_id: extra.id, job_id: matches[0].id };
+      outcome = { kind: parsed.kind + '_recorded', record_id: ins.id, job_id: jobId };
     } else {
       // Ambiguous or unknown job: persist the capture, ask ONE question.
       const { data: res } = await sb.from('resolution_queue').insert({
@@ -216,9 +274,15 @@ serve(async (req) => {
   const reply = optedOut ? null
     : outcome.kind === 'extra_recorded'
       ? `Filed: ${parsed.output.description}${parsed.output.amount_cents != null ? ' $' + (parsed.output.amount_cents / 100).toFixed(2) : ''} unbilled. Nothing sent.`
-      : outcome.kind === 'unresolved'
-        ? 'Saved your note. Which job does it belong to? Nothing filed yet.'
-        : 'Saved. Nothing filed yet.';
+      : outcome.kind === 'quote_recorded'
+        ? `Filed: quote ${parsed.output.amount_cents != null ? '$' + (parsed.output.amount_cents / 100).toFixed(2) : '(no price recorded)'}. Nothing sent.`
+        : outcome.kind === 'schedule_recorded'
+          ? `Filed on your plan: ${parsed.output.when_text}. Customer side untouched.`
+          : outcome.kind === 'warranty_recorded'
+            ? `Filed warranty: ${parsed.output.item}.`
+            : outcome.kind === 'unresolved'
+              ? 'Saved your note. Which job does it belong to? Nothing filed yet.'
+              : 'Saved. Nothing filed yet.';
 
   return json({ ok: true, duplicate_safe: true, outcome, reply, opted_out: optedOut });
 });
