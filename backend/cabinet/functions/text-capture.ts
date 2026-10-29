@@ -129,8 +129,11 @@ serve(async (req) => {
   const businessId = ids[0].business_id;
 
   // 2. Opt-out check (before any reply dispatch; capture still proceeds).
-  const { data: opt } = await sb
+  // Fail CLOSED: if the opt-out lookup errors, treat the number as opted
+  // out - suppress any reply rather than text an unknown-status number.
+  const { data: opt, error: optErr } = await sb
     .from('sms_opt_outs').select('phone').eq('phone', fromPhone).maybeSingle();
+  const optedOut = optErr ? true : !!opt;
 
   // 3. Idempotent durable commit of the immutable source. ignoreDuplicates:
   // a replayed provider delivery inserts NOTHING and returns no row, and we
@@ -210,12 +213,12 @@ serve(async (req) => {
   }
 
   // 6. Ack only after durable commit. Reply text says "filed" only when it is.
-  const reply = opt ? null
+  const reply = optedOut ? null
     : outcome.kind === 'extra_recorded'
       ? `Filed: ${parsed.output.description}${parsed.output.amount_cents != null ? ' $' + (parsed.output.amount_cents / 100).toFixed(2) : ''} unbilled. Nothing sent.`
       : outcome.kind === 'unresolved'
         ? 'Saved your note. Which job does it belong to? Nothing filed yet.'
         : 'Saved. Nothing filed yet.';
 
-  return json({ ok: true, duplicate_safe: true, outcome, reply, opted_out: !!opt });
+  return json({ ok: true, duplicate_safe: true, outcome, reply, opted_out: optedOut });
 });
