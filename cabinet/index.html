@@ -82,7 +82,8 @@ input,select{
   <div class="inner">
     <div id="sched"></div>
     <div style="margin-top:14px">
-      <select id="schedjob"></select>
+      <span class="meta">New plan:</span>
+      <select id="schedjob" aria-label="Job for the new plan"></select>
       <input id="schedstart" type="datetime-local">
       <button id="addplan">Add to my plan</button>
     </div>
@@ -96,7 +97,8 @@ input,select{
   <summary>Record a quote</summary>
   <div class="inner">
     <span class="quiet">Fastest way: text it, like "quote Miller, $400" - it lands here on its own. Or use this form:</span><br>
-    <select id="quotejob"></select>
+    <span class="meta">New quote:</span>
+    <select id="quotejob" aria-label="Job for the new quote"></select>
     <input id="quoteamt" placeholder="Amount $" size="8" inputmode="decimal">
     <button id="addquote">Record</button>
   </div>
@@ -148,7 +150,7 @@ async function loadData(){
   const refs=(queue||[]).map(x=>x.source_ref).filter(Boolean);
   if(refs.length){const r=await sb.from('inbound_messages').select('id,body').in('id',refs);(r.data||[]).forEach(m=>{snips[m.id]=m.body;});}
   d.snips=snips;
-  const opts='<option value="">(no job)</option>'+jobs.map(x=>`<option value="${x.id}">${esc(x.title)}</option>`).join('');
+  const opts='<option value="">No job yet</option>'+jobs.map(x=>`<option value="${x.id}">${esc(x.title)}</option>`).join('');
   $('schedjob').innerHTML=opts;$('quotejob').innerHTML=opts;
   render();
 }
@@ -220,7 +222,8 @@ function render(){
   $('sched').innerHTML=(d.sched&&d.sched.length)?d.sched.map(x=>{
     const when=x.proposed_start?new Date(x.proposed_start).toLocaleString(undefined,{weekday:'short',month:'short',day:'numeric',hour:'numeric',minute:'2-digit'}):'no time recorded';
     const next=x.state==='owner_plan'?'<button data-sact="proposed" data-id="'+x.id+'">Proposed</button>':x.state==='proposed'?'<button data-sact="customer_confirmed" data-id="'+x.id+'">Customer confirmed</button>':'';
-    return `<div class="row"><span class="what">${esc(jobName(x.job_id)||'')} - ${esc(when)}</span><span class="meta">${esc(label[x.state]||x.state)}</span><span>${next}<button data-sact="declined" data-id="${x.id}">Declined</button></span></div>`;
+    const dec=(x.state==='owner_plan'||x.state==='proposed')?'<button data-sact="declined" data-id="'+x.id+'">Declined</button>':'';
+    return `<div class="row"><span class="what">${esc(jobName(x.job_id)||'')} - ${esc(when)}</span><span class="meta">${esc(label[x.state]||x.state)}</span><span>${next}${dec}</span></div>`;
   }).join(''):'<span class="quiet">Nothing scheduled.</span>';
   $('sched').querySelectorAll('[data-sact]').forEach(b=>b.onclick=()=>schedAction(b));
 
