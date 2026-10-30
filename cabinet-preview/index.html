@@ -51,13 +51,14 @@ input,select{
 .foot{margin-top:64px;color:var(--gray);font-size:13px}
 .quiet{color:var(--gray);font-size:15px}
 </style>
+
 </head>
 <body>
 <h1>Cabinet</h1>
 
 <div class="hero" id="hero"><div class="amount">$1,240</div><button class="sub" id="herojobs">owed to you across 1 job</button></div>
 
-<section id="needs"><h2>Needs your yes</h2><div class="row"><span class="what">One of your texts needs a job picked.</span><span class="meta">"Need a quote for the garage panel swap..." - Pick the job it belongs to.</span><span><button data-q="r1" data-i="0">Miller on Oak St</button><button data-q="r1" data-i="1">Garcia rewire</button></span></div><div class="row"><span class="what">Hi Dan - following up on the panel quote from last week. Any questions I can answer?</span><span class="meta">Draft followup to Dan Miller - never sends by itself.</span><span><button class="primary" data-dact="approved" data-id="d1" data-v="1">Approve these words</button><button data-dact="canceled" data-id="d1">Not this</button></span></div></section>
+<section id="needs"><h2>Needs your yes</h2><div class="row"><span class="what">One of your texts needs a job picked.</span><span class="meta">"Need a quote for the garage panel swap..." - Pick the job it belongs to.</span><span><button data-q="r1" data-i="0">Miller on Oak St</button><button data-q="r1" data-i="1">Garcia rewire</button></span></div><div class="row"><span class="what">Hi Dan - following up on the panel quote from last week. Any questions I can answer?</span><span class="meta">Draft followup to Dan Miller - never sends by itself.</span><span><button class="primary" data-dact="approved" data-id="d1" data-v="1">Approve these words</button><button data-dact="canceled" data-id="d1">Don't send</button></span></div></section>
 <section id="nudge"><h2>Worth a nudge</h2><span class="quiet">One reminder per quote, 28 quiet days after it goes out. <button id="stallcfg" style="margin:0;font-size:13px">change</button></span><div class="row"><span class="what">Miller on Oak St - $425</span><span class="meta">Quoted 29 days ago, no answer yet.</span><span><button data-nact="nudge" data-id="q1" data-n="0">Nudged</button></span></div></section>
 
 <details>
@@ -81,7 +82,7 @@ input,select{
     <div id="sched"><div class="row"><span class="what">Miller on Oak St - Fri, Oct 30, 8:00 AM</span><span class="meta">your plan</span><span><button data-sact="proposed" data-id="s1">Proposed</button><button data-sact="declined" data-id="s1">Declined</button></span></div><div class="row"><span class="what">Garcia rewire - Sat, Oct 31, 10:00 AM</span><span class="meta">confirmed by customer</span><span></span></div></div>
     <div style="margin-top:14px">
       <span class="meta">New plan:</span>
-      <select id="schedjob" aria-label="Job for the new plan"><option value="">No job yet</option><option value="j1">Miller on Oak St</option><option value="j2">Garcia rewire</option></select>
+      <select id="schedjob" aria-label="Job for the new plan"><option value="">Pick a job (optional)</option><option value="j1">Miller on Oak St</option><option value="j2">Garcia rewire</option></select>
       <input id="schedstart" type="datetime-local">
       <button id="addplan">Add to my plan</button>
     </div>
@@ -96,7 +97,7 @@ input,select{
   <div class="inner">
     <span class="quiet">Fastest way: text it, like "quote Miller, $400" - it lands here on its own. Or use this form:</span><br>
     <span class="meta">New quote:</span>
-    <select id="quotejob" aria-label="Job for the new quote"><option value="">No job yet</option><option value="j1">Miller on Oak St</option><option value="j2">Garcia rewire</option></select>
+    <select id="quotejob" aria-label="Job for the new quote"><option value="">Pick a job (optional)</option><option value="j1">Miller on Oak St</option><option value="j2">Garcia rewire</option></select>
     <input id="quoteamt" placeholder="Amount $" size="8" inputmode="decimal">
     <button id="addquote">Record</button>
   </div>
