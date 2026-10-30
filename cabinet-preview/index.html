@@ -62,7 +62,7 @@ input,select{
 
 <details>
   <summary>The money in detail</summary>
-  <div class="inner" id="money"><div class="row"><span class="what">Miller on Oak St - $1,240</span><span class="meta">12 days out</span><span class="meta">Heard from you: $500 - said he mailed half</span></div><div class="row"><span class="what">Quote: Miller on Oak St - $425</span><span class="meta">29 days old</span><span><button data-nact="nudge" data-id="q1" data-n="0">Nudged</button><button data-nact="won" data-id="q1">Won</button><button data-nact="lost" data-id="q1">Lost</button></span></div><div class="row"><span class="what">Quote: Garcia rewire - $890</span><span class="meta">1 day old</span><span><button data-nact="nudge" data-id="q2" data-n="0">Nudged</button><button data-nact="won" data-id="q2">Won</button><button data-nact="lost" data-id="q2">Lost</button></span></div><div class="row"><span class="what">added outlet - $180</span><span class="meta">Miller on Oak St - recorded</span><span><button data-eact="priced" data-id="e1">Priced</button><button data-eact="voided" data-id="e1">Void</button></span></div></div>
+  <div class="inner" id="money"><div class="row"><span class="what">Miller on Oak St - $1,240</span><span class="meta">13 days out</span><span class="meta">Heard from you: $500 - said he mailed half</span></div><div class="row"><span class="what">Quote: Miller on Oak St - $425</span><span class="meta">29 days old</span><span><button data-nact="nudge" data-id="q1" data-n="0">Nudged</button><button data-nact="won" data-id="q1">Won</button><button data-nact="lost" data-id="q1">Lost</button></span></div><div class="row"><span class="what">Quote: Garcia rewire - $890</span><span class="meta">1 day old</span><span><button data-nact="nudge" data-id="q2" data-n="0">Nudged</button><button data-nact="won" data-id="q2">Won</button><button data-nact="lost" data-id="q2">Lost</button></span></div><div class="row"><span class="what">added outlet - $180</span><span class="meta">Miller on Oak St - recorded</span><span><button data-eact="priced" data-id="e1">Priced</button><button data-eact="voided" data-id="e1">Void</button></span></div></div>
 </details>
 <details>
   <summary>Jobs</summary>
@@ -78,9 +78,10 @@ input,select{
 <details>
   <summary>Schedule</summary>
   <div class="inner">
-    <div id="sched"><div class="row"><span class="what">Miller on Oak St - Fri, Oct 30, 8:00 AM</span><span class="meta">your plan</span><span><button data-sact="proposed" data-id="s1">Proposed</button><button data-sact="declined" data-id="s1">Declined</button></span></div><div class="row"><span class="what">Garcia rewire - Sat, Oct 31, 10:00 AM</span><span class="meta">confirmed by customer</span><span><button data-sact="declined" data-id="s2">Declined</button></span></div></div>
+    <div id="sched"><div class="row"><span class="what">Miller on Oak St - Fri, Oct 30, 8:00 AM</span><span class="meta">your plan</span><span><button data-sact="proposed" data-id="s1">Proposed</button><button data-sact="declined" data-id="s1">Declined</button></span></div><div class="row"><span class="what">Garcia rewire - Sat, Oct 31, 10:00 AM</span><span class="meta">confirmed by customer</span><span></span></div></div>
     <div style="margin-top:14px">
-      <select id="schedjob"><option value="">(no job)</option><option value="j1">Miller on Oak St</option><option value="j2">Garcia rewire</option></select>
+      <span class="meta">New plan:</span>
+      <select id="schedjob" aria-label="Job for the new plan"><option value="">No job yet</option><option value="j1">Miller on Oak St</option><option value="j2">Garcia rewire</option></select>
       <input id="schedstart" type="datetime-local">
       <button id="addplan">Add to my plan</button>
     </div>
@@ -94,7 +95,8 @@ input,select{
   <summary>Record a quote</summary>
   <div class="inner">
     <span class="quiet">Fastest way: text it, like "quote Miller, $400" - it lands here on its own. Or use this form:</span><br>
-    <select id="quotejob"><option value="">(no job)</option><option value="j1">Miller on Oak St</option><option value="j2">Garcia rewire</option></select>
+    <span class="meta">New quote:</span>
+    <select id="quotejob" aria-label="Job for the new quote"><option value="">No job yet</option><option value="j1">Miller on Oak St</option><option value="j2">Garcia rewire</option></select>
     <input id="quoteamt" placeholder="Amount $" size="8" inputmode="decimal">
     <button id="addquote">Record</button>
   </div>
