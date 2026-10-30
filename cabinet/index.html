@@ -150,7 +150,7 @@ async function loadData(){
   const refs=(queue||[]).map(x=>x.source_ref).filter(Boolean);
   if(refs.length){const r=await sb.from('inbound_messages').select('id,body').in('id',refs);(r.data||[]).forEach(m=>{snips[m.id]=m.body;});}
   d.snips=snips;
-  const opts='<option value="">No job yet</option>'+jobs.map(x=>`<option value="${x.id}">${esc(x.title)}</option>`).join('');
+  const opts='<option value="">Pick a job (optional)</option>'+jobs.map(x=>`<option value="${x.id}">${esc(x.title)}</option>`).join('');
   $('schedjob').innerHTML=opts;$('quotejob').innerHTML=opts;
   render();
 }
@@ -176,7 +176,7 @@ function render(){
     items.push(`<div class="row"><span class="what">${(x.question==='which_job'||x.question==='which_of_these_jobs')?'One of your texts needs a job picked.':esc(x.question)}</span><span class="meta">${(d.snips||{})[x.source_ref]?'"'+esc(firstWords(d.snips[x.source_ref],8))+'" - ':''}Pick the job it belongs to.</span><span>${opts}</span></div>`);
   });
   (d.drafts||[]).filter(x=>x.state==='draft').forEach(x=>{
-    items.push(`<div class="row"><span class="what">${esc(x.body)}</span><span class="meta">Draft ${esc(x.kind)} to ${esc(custName(x,d.jobs,d.custs))} - never sends by itself.</span><span><button class="primary" data-dact="approved" data-id="${x.id}" data-v="${x.version}">Approve these words</button><button data-dact="canceled" data-id="${x.id}">Not this</button></span></div>`);
+    items.push(`<div class="row"><span class="what">${esc(x.body)}</span><span class="meta">Draft ${esc(x.kind)} to ${esc(custName(x,d.jobs,d.custs))} - never sends by itself.</span><span><button class="primary" data-dact="approved" data-id="${x.id}" data-v="${x.version}">Approve these words</button><button data-dact="canceled" data-id="${x.id}">Don't send</button></span></div>`);
   });
   $('needs').innerHTML = items.length
     ? `<h2>Needs your yes</h2>${items.join('')}`
