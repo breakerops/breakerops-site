@@ -1,0 +1,96 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BreakerOps app mockup (preview)</title><meta name="robots" content="noindex,nofollow">
+<style>
+*{box-sizing:border-box}
+body{margin:0;background:#e9e9eb;color:#111;font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
+.screen{max-width:430px;margin:0 auto 40px;background:#fff;min-height:100dvh;display:flex;flex-direction:column;border-left:1px solid #d8d8dc;border-right:1px solid #d8d8dc}
+header{padding:16px 22px 8px}
+.brand{font-weight:800;letter-spacing:-.02em;font-size:20px}
+.brand span{font-weight:400}
+.date{font-size:14px;color:#595959;margin-top:2px}
+.pnav{display:flex;gap:24px;margin:10px 0 0;border-bottom:1px solid #d8d8dc;padding:0 22px}
+.pnav div{font-size:16px;color:#595959;padding:10px 0}
+.pnav .on{color:#111;border-bottom:2px solid #111;font-weight:600}
+main{flex:1;padding:6px 22px 20px}
+h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#595959;margin:22px 0 6px;font-weight:600}
+.list{list-style:none;padding:0;margin:0;border-top:1px solid #d8d8dc}
+.list li{padding:13px 0;border-bottom:1px solid #d8d8dc}
+.list b{font-size:16px;display:block}
+.list small{color:#595959;display:block;font-size:13.5px;margin-top:1px}
+.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
+.row .amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
+.matt{background:#e9e9eb;border-radius:16px;padding:14px 16px;margin:16px 0 4px;font-size:15.5px}
+.matt b{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#595959;display:block;margin-bottom:4px;font-weight:600}
+.matt .act{color:#007aff;font-size:14.5px;display:inline-block;margin-top:8px}
+.total{font-size:14px;color:#595959;margin-top:10px}
+.foot{padding:14px 22px 22px;font-size:13.5px;color:#595959;border-top:1px solid #d8d8dc}
+.mock{text-align:center;font-size:10px;letter-spacing:.12em;color:#8e8e93;padding:6px 0 10px}
+.tag{display:inline-block;font-size:11px;color:#595959;border:1px solid #d8d8dc;border-radius:999px;padding:1px 8px;margin-left:6px;vertical-align:middle}
+</style></head><body>
+
+<div class="screen" id="today">
+<header><div class="brand">Breaker<span>Ops</span></div><div class="date">Tuesday, November 3</div></header>
+<nav class="pnav"><div class="on">Today</div><div>Money</div><div>Dates</div></nav>
+<main>
+<h2>Today's jobs</h2>
+<ul class="list">
+<li><div class="row"><b>Panel upgrade - Anderson</b></div><small>8:00 AM - 214 Birch Ln. Permit posted, inspection Thursday.</small></li>
+<li><div class="row"><b>EV charger install - Kowalski</b></div><small>1:00 PM - 88 Cedar Ct. Bring 50A breaker, part picked up yesterday.</small></li>
+<li><div class="row"><b>Service call - Bistro on Main</b></div><small>4:30 PM - flickering lights in the back room. They texted last night.</small></li>
+</ul>
+<div class="matt"><b>Matt</b>
+The quote for the Nelson garage rewire has been out 4 days with no answer. Want me to draft a follow-up text?
+<span class="act">Review draft</span></div>
+<div class="matt"><b>Matt</b>
+The Bistro on Main invoice is 14 days old today. Want me to draft a friendly nudge?
+<span class="act">Review draft</span></div>
+</main>
+<div class="foot">Text Matt anytime to add a job, move one, or ask something.</div>
+<div class="mock">MOCKUP - NOT REAL DATA</div>
+</div>
+
+<div class="screen" id="money">
+<header><div class="brand">Breaker<span>Ops</span></div><div class="date">Money</div></header>
+<nav class="pnav"><div>Today</div><div class="on">Money</div><div>Dates</div></nav>
+<main>
+<h2>Who owes you</h2>
+<ul class="list">
+<li><div class="row"><b>Bistro on Main</b><span class="amt">$640</span></div><small>Invoice sent Oct 20 - 14 days</small></li>
+<li><div class="row"><b>Harrow Construction</b><span class="amt">$3,200</span></div><small>Invoice sent Oct 2 - 32 days</small></li>
+<li><div class="row"><b>Peterson (service call)</b><span class="amt">$185</span></div><small>Invoice sent Oct 30 - 4 days</small></li>
+</ul>
+<div class="total">$4,025 out right now</div>
+<h2>Quotes out</h2>
+<ul class="list">
+<li><div class="row"><b>Nelson garage rewire</b><span class="amt">$1,850</span></div><small>Sent Oct 30 - no answer yet</small></li>
+<li><div class="row"><b>Addison basement finish</b><span class="amt">$2,700</span></div><small>Sent Nov 1 - they said Friday</small></li>
+</ul>
+<div class="matt"><b>Matt</b>
+Harrow Construction is past 30 days. Want me to draft a firmer note, or would you rather call them?
+<span class="act">Review draft</span></div>
+</main>
+<div class="foot">Books stay in QuickBooks. This is just what needs your attention.</div>
+<div class="mock">MOCKUP - NOT REAL DATA</div>
+</div>
+
+<div class="screen" id="dates">
+<header><div class="brand">Breaker<span>Ops</span></div><div class="date">Dates</div></header>
+<nav class="pnav"><div>Today</div><div>Money</div><div class="on">Dates</div></nav>
+<main>
+<h2>Coming up</h2>
+<ul class="list">
+<li><div class="row"><b>Inspection - Anderson panel</b></div><small>Thursday Nov 6, morning window. Permit #E-2214.</small></li>
+<li><div class="row"><b>Master license renewal</b></div><small>Due Nov 30. CE hours done, just file.</small></li>
+<li><div class="row"><b>Liability insurance renewal</b></div><small>Renews Dec 15. COI for Harrow expires the same week.</small></li>
+<li><div class="row"><b>Estimated taxes</b></div><small>Q4 payment due Jan 15.</small></li>
+</ul>
+<div class="matt"><b>Matt</b>
+Your license renewal is 4 weeks out. I will remind you again at 2 weeks and 3 days. Nothing to do yet.
+</div>
+</main>
+<div class="foot">Tell Matt a date once. He keeps an eye on it from there.</div>
+<div class="mock">MOCKUP - NOT REAL DATA</div>
+</div>
+
+</body></html>
