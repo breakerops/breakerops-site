@@ -149,7 +149,7 @@
       typing=document.getElementById('typing'),rec=document.getElementById('rec');
   var shift=true,num=false,stage=0;
   var letters=[['q','w','e','r','t','y','u','i','o','p'],['a','s','d','f','g','h','j','k','l'],['z','x','c','v','b','n','m']];
-  var nums=[['1','2','3','4','5','6','7','8','9','0'],['-','/',':',';','(',')','$','&','@','"'],['.',',','?','!',''']];
+  var nums=[['1','2','3','4','5','6','7','8','9','0'],['-','/',':',';','(',')','$','&','@','"'],['.',',','?','!',"'"]];
   function now(){var d=new Date(),h=d.getHours(),m=d.getMinutes(),ap=h>=12?'PM':'AM';h=h%12||12;return h+':'+(m<10?'0':'')+m+' '+ap}
   document.getElementById('clock').textContent=now().replace(/ [AP]M/,'');
   document.getElementById('stamp2').textContent='Today '+now();
