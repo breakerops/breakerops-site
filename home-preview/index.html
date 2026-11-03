@@ -2,13 +2,19 @@
 <html lang="en"><head><meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1, maximum-scale=1, user-scalable=no, viewport-fit=cover">
 <title>Matt | BreakerOps preview</title>
+<meta property="og:title" content="Matt | BreakerOps">
+<meta property="og:description" content="Text Matt. He keeps track of your jobs, quotes and who owes you what.">
+<meta property="og:image" content="https://www.breakerops.com/home-preview/preview-card.png">
+<meta property="og:type" content="website">
+<meta name="twitter:card" content="summary_large_image">
+<meta name="theme-color" content="#000000">
 <style>
   :root{
     --bg:#000; --hdr:#1c1c1e; --in:#26252a; --out:#0a84ff; --bar:#1c1c1e;
     --kbd:#131316; --key:#434345; --keyfn:#2c2c2e; --txt:#fff; --dim:#8e8e93;
   }
   *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
-  html,body{height:100%;overflow:hidden}
+  html,body{height:100%;overflow:hidden} body{position:fixed;inset:0}
   body{background:var(--bg);color:var(--txt);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Helvetica Neue",Helvetica,Arial,sans-serif;display:flex;flex-direction:column}
   /* header */
   .hdr{display:flex;align-items:center;justify-content:space-between;padding:10px 14px 8px;background:var(--bg)}
@@ -64,7 +70,7 @@
   <div class="bar">
     <div class="plus">+</div>
     <div class="field">
-      <input id="inp" value="Sign me up!" autocomplete="off" autocapitalize="sentences">
+      <input id="inp" value="Sign me up!" autocomplete="off" autocapitalize="sentences" readonly inputmode="none" style="caret-color:transparent">
       <button class="send" id="send" aria-label="Send"><svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="3" stroke-linecap="round" stroke-linejoin="round"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
     </div>
   </div>
