@@ -177,6 +177,7 @@ h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
 function go(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id));window.scrollTo(0,0);if(('#'+id)!==location.hash)history.replaceState(null,'','#'+id);}
 document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.go)));
 document.getElementById('mattbtn').addEventListener('click',()=>{});
-const h=location.hash.slice(1);if(h&&document.getElementById(h))go(h);
+function fromHash(){const h=location.hash.slice(1);if(h&&document.getElementById(h))go(h);}
+fromHash();window.addEventListener('hashchange',fromHash);
 </script>
 </body></html>
