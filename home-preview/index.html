@@ -1,0 +1,62 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BreakerOps preview | Text Matt</title>
+<meta name="description" content="Preview concept, not live. BreakerOps is a text-first assistant for owner-run trade shops.">
+<meta name="robots" content="noindex">
+<meta name="theme-color" content="#f5f5f4">
+<style>
+*{box-sizing:border-box}
+:root{--bg:#f5f5f4;--card:#ffffff;--fg:#171717;--muted:#8a8a8e;--border:#e2e2e4;--blue:#0a84ff;--bubble-in:#e9e9eb}
+body{margin:0;background:var(--bg);color:var(--fg);font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;display:flex;flex-direction:column;min-height:100vh}
+.wrap{max-width:560px;margin:0 auto;padding:0 16px;width:100%}
+.topbar{padding:12px 0;border-bottom:1px solid var(--border);background:var(--bg)}
+.topin{display:flex;justify-content:space-between;align-items:center}
+.brand{font-weight:800;letter-spacing:-.02em;font-size:17px;text-decoration:none;color:var(--fg)}
+.brand span{font-weight:400;color:var(--blue)}
+.topin a.login{font-size:14px;color:var(--muted);text-decoration:none}
+.contact{display:flex;flex-direction:column;align-items:center;padding:14px 0 10px}
+.avatar{width:52px;height:52px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:22px}
+.contact .name{font-weight:600;font-size:15px;margin-top:6px}
+.contact .sub{font-size:12px;color:var(--muted)}
+main{flex:1 0 auto;display:flex;flex-direction:column}
+.thread{flex:1;padding:14px 0 8px;display:flex;flex-direction:column;justify-content:flex-end}
+.msg{max-width:78%;padding:9px 13px;border-radius:17px;margin:0 0 8px;font-size:15.5px;line-height:1.35;clear:both;animation:pop .18s ease-out}
+@keyframes pop{from{opacity:0;transform:translateY(4px)}to{opacity:1;transform:none}}
+.in{background:var(--bubble-in);color:var(--fg);align-self:flex-start;border-bottom-left-radius:4px}
+.out{background:var(--blue);color:#fff;align-self:flex-end;border-bottom-right-radius:4px}
+.bar{display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:24px;padding:6px 6px 6px 14px;margin:8px 0 4px}
+.bar input{flex:1;border:0;outline:0;font:15px/1.4 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;padding:8px 0;background:transparent;color:var(--fg)}
+.bar input::placeholder{color:var(--muted)}
+.send{width:34px;height:34px;border:0;border-radius:50%;background:var(--blue);display:flex;align-items:center;justify-content:center;cursor:pointer;flex:0 0 auto}
+.send svg{width:16px;height:16px;stroke:#fff;stroke-width:2.4;fill:none;stroke-linecap:round;stroke-linejoin:round}
+.consent{font-size:11.5px;color:var(--muted);margin:2px 6px 0;text-align:center}
+footer{font:11.5px/1.7 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;color:var(--muted);padding:14px 0 16px;text-align:center}
+footer a{color:var(--muted)}
+.preview-tag{font-size:11px;color:var(--muted);text-align:center;margin:6px 0 0}
+</style><link rel="icon" href="/assets/img/brand-icon-v2.png" type="image/png" sizes="256x256"></head><body>
+<header class="topbar"><div class="wrap topin"><a class="brand" href="/">Breaker<span>Ops</span></a><a class="login" href="/login/">Log in</a></div></header>
+<div class="wrap"><div class="contact"><div class="avatar">M</div><div class="name">Matt</div><div class="sub">BreakerOps assistant</div></div></div>
+<main class="wrap"><div class="thread" id="thread">
+<div class="msg in">I'm Matt. I keep track of your jobs, quotes and who owes you what, all over text.</div>
+<div class="msg in">You approve everything before anything goes out. Your first week is free.</div>
+</div>
+<form class="bar" id="bar" autocomplete="off">
+<input id="field" type="text" value="Sign me up!" aria-label="Message Matt">
+<button class="send" type="submit" aria-label="Send"><svg viewBox="0 0 24 24"><path d="M12 19V5M5 12l7-7 7 7"/></svg></button>
+</form>
+<p class="consent" id="consent" hidden>By sending your number you agree we can text it about your free week. Reply STOP anytime.</p>
+<p class="preview-tag">Preview concept - not live</p>
+</main>
+<footer><div class="wrap"><a href="/terms/">Terms</a> &middot; <a href="/sms-terms/">SMS Terms</a> &middot; <a href="/privacy/">Privacy</a></div></footer>
+<script>
+var step=0;
+var bar=document.getElementById('bar'),field=document.getElementById('field'),thread=document.getElementById('thread'),consent=document.getElementById('consent');
+function bubble(cls,text){var d=document.createElement('div');d.className='msg '+cls;d.textContent=text;thread.appendChild(d);window.scrollTo(0,document.body.scrollHeight);}
+bar.addEventListener('submit',function(e){e.preventDefault();var v=field.value.trim();if(!v)return;
+if(step===0){bubble('out',v);field.value='';field.placeholder='Your cell number';field.type='tel';consent.hidden=false;step=1;
+setTimeout(function(){bubble('in',"What's the best cell for you? I'll text you there when your free week starts.");},450);}
+else if(step===1){bubble('out',v);field.value='';field.placeholder='';field.disabled=true;step=2;
+setTimeout(function(){bubble('in',"You're in. Watch for a text from us this week.");},450);}
+});
+</script>
+</body></html>
