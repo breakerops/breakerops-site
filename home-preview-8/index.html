@@ -65,6 +65,16 @@
   .hdr2 .mid{position:absolute;left:50%;transform:translateX(-50%);display:flex;flex-direction:column;align-items:center;gap:1px}
   .hdr2 .mid img{width:64px;height:64px;border-radius:50%;object-fit:cover}
   .hdr2 .mid .nm{font-size:11px;color:var(--dim)}
+  .menuicon{position:fixed;top:14px;right:12px;z-index:40;background:none;border:none;color:#8e8e93;padding:8px;cursor:pointer}
+  .menu{display:none;position:fixed;inset:0;background:rgba(0,0,0,.62);align-items:center;justify-content:center;z-index:50;padding:0 30px}
+  .menucard{background:#2c2c2e;border:1px solid #3a3a3c;border-radius:20px;padding:22px 24px 24px;max-width:330px;width:100%}
+  .mtabs{display:flex;gap:8px;margin-bottom:16px}
+  .mtab{flex:1;background:none;border:none;border-bottom:2px solid #3a3a3c;color:#8e8e93;font-size:15px;font-weight:600;font-family:inherit;padding:8px 0;cursor:pointer}
+  .mtab.active{color:#fff;border-bottom-color:#6b9bff}
+  .mpane{color:#e8e8ed;font-size:15px;line-height:1.5;min-height:72px}
+  .mpane .pprice{color:#6b9bff;font-size:16px;font-weight:600;text-align:center;margin:6px 0 8px}
+  .mpane .pnote{color:#8e8e93;font-size:13px;line-height:1.45;text-align:center}
+  .mclose{width:100%;background:#6b9bff;color:#fff;border:none;border-radius:14px;padding:13px 16px;font-size:16px;font-weight:600;font-family:inherit;cursor:pointer;margin-top:20px}
 </style><style>
   .deck{flex:1;display:flex;overflow-x:auto;scroll-snap-type:x mandatory;scrollbar-width:none}
   .deck::-webkit-scrollbar{display:none}
@@ -89,12 +99,11 @@
   .wlcheck{width:64px;height:64px;border-radius:50%;background:#6b9bff;color:#fff;font-size:34px;line-height:64px;margin:0 auto 16px}
   .wlt{color:#fff;font-size:19px;font-weight:600;margin-bottom:8px}
   .wls{color:#e8e8ed;font-size:15px;line-height:1.45;margin-bottom:10px}
-  .wlprice{color:#6b9bff;font-size:15px;font-weight:600;margin-bottom:8px}
-  .wlp{color:#8e8e93;font-size:13px;line-height:1.45;margin-bottom:20px}
   .wlcard button{width:100%;background:#6b9bff;color:#fff;border:none;border-radius:14px;padding:13px 16px;font-size:16px;font-weight:600;font-family:inherit;cursor:pointer}
 .convo .in.last::after,.convo .out.last::after{background:var(--bg)}
 </style></head>
 <body>
+  <button class="menuicon" id="menuicon" aria-label="About and pricing"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><line x1="4" y1="6" x2="20" y2="6"/><circle cx="9" cy="6" r="2.4" fill="#2a2a2d"/><line x1="4" y1="12" x2="20" y2="12"/><circle cx="15" cy="12" r="2.4" fill="#2a2a2d"/><line x1="4" y1="18" x2="20" y2="18"/><circle cx="7" cy="18" r="2.4" fill="#2a2a2d"/></svg></button>
   <div class="headline">Breaker<span>Ops</span></div>
   <div class="sub">An electrician&#39;s assistant.</div>
   <div class="deck" id="deck">
@@ -114,13 +123,25 @@
     <div class="sconsent" id="sconsent">By signing up with your number you agree to receive texts from BreakerOps. Reply STOP to opt out. <a href="/terms/">Terms</a> &middot; <a href="/sms-terms/">SMS Terms</a> &middot; <a href="/privacy/">Privacy</a></div>
     <div class="serr" id="serr"></div>
   </div>
+  <div class="menu" id="menu">
+    <div class="menucard">
+      <div class="mtabs">
+        <button class="mtab active" id="tab-about">About</button>
+        <button class="mtab" id="tab-pricing">Pricing</button>
+      </div>
+      <div class="mpane" id="pane-about">BreakerOps is Matt, a friendly assistant for electricians who run their own shop. He keeps track of jobs, quotes and invoices, and texts you when something needs doing.</div>
+      <div class="mpane" id="pane-pricing" style="display:none">
+        <div class="pprice">Free your first week, then $20 a month.</div>
+        <div class="pnote">You won&#39;t be asked for payment info until your free week is over.</div>
+      </div>
+      <button class="mclose" id="menudone">Done</button>
+    </div>
+  </div>
   <div class="wl" id="wl">
     <div class="wlcard">
       <div class="wlcheck">&#10003;</div>
       <div class="wlt">You&#39;re on the waitlist.</div>
       <div class="wls">You&#39;ll get a text confirmation soon.</div>
-      <div class="wlprice">Free your first week, then $20 a month.</div>
-      <div class="wlp">You won&#39;t be asked for payment info until your free week is over.</div>
       <button id="wldone">Done</button>
     </div>
   </div>
@@ -163,6 +184,14 @@
     wl.style.display='none';signup.style.display='none';
     pill.style.display='';dots.style.display='';deck.style.display='';
   };
+  var menu=document.getElementById('menu');
+  document.getElementById('menuicon').onclick=function(){menu.style.display='flex'};
+  document.getElementById('menudone').onclick=function(){menu.style.display='none'};
+  menu.onclick=function(e){if(e.target===menu)menu.style.display='none'};
+  var ta=document.getElementById('tab-about'),tp=document.getElementById('tab-pricing'),
+      pa=document.getElementById('pane-about'),pp=document.getElementById('pane-pricing');
+  ta.onclick=function(){ta.className='mtab active';tp.className='mtab';pa.style.display='block';pp.style.display='none'};
+  tp.onclick=function(){tp.className='mtab active';ta.className='mtab';pp.style.display='block';pa.style.display='none'};
 })();
 </script>
 </body></html>
