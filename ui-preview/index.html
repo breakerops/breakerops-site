@@ -40,6 +40,7 @@ h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
 .total .l{font-size:13px;color:#595959}
 .mattbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;border-top:1px solid #d8d8dc;padding:12px 22px calc(12px + env(safe-area-inset-bottom))}
 .mattbar button{width:100%;background:#007aff;color:#fff;border:0;border-radius:14px;padding:14px;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.knows{font-size:13px;color:#595959;margin:0 22px}
 .mock{text-align:center;font-size:11px;letter-spacing:.12em;color:#aeaeb2;padding:26px 0 10px}
 .kv{display:flex;gap:12px;align-items:flex-start;padding:11px 22px}
 .kv svg{flex:none;margin-top:2px;color:#595959}
@@ -81,6 +82,7 @@ h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
 <div class="screen" id="jobs">
 <button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
 <h1>Jobs</h1>
+<div class="knows">as far as Matt knows</div>
 <div class="h2">Today</div>
 <div class="row" data-go="job-anderson"><svg class="ic2"><use href="#i-jobs"/></svg><div class="main"><div class="tt">Panel upgrade</div><div class="dd">Anderson - 8:00 AM</div></div><span class="chip blue">8:00 AM</span><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
 <div class="row" data-go="job-kowalski"><svg class="ic2"><use href="#i-jobs"/></svg><div class="main"><div class="tt">EV charger install</div><div class="dd">Kowalski - 1:00 PM</div></div><span class="chip blue">1:00 PM</span><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
@@ -115,6 +117,7 @@ h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
 <div class="screen" id="customers">
 <button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
 <h1>Customers</h1>
+<div class="knows">as far as Matt knows</div>
 <div class="h2">On file</div>
 <div class="row" data-go="cust-harrow"><div class="av">H</div><div class="main"><div class="tt">Harrow Construction</div><div class="dd">General contractor</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
 <div class="row"><div class="av">A</div><div class="main"><div class="tt">Anderson</div><div class="dd">Residential</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
@@ -137,6 +140,7 @@ h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
 <div class="screen" id="quotes">
 <button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
 <h1>Quotes</h1>
+<div class="knows">as far as Matt knows</div>
 <div class="h2">Out</div>
 <div class="row"><svg class="ic2"><use href="#i-quote"/></svg><div class="main"><div class="tt">Nelson garage rewire</div><div class="dd">Sent Oct 30</div></div><div style="text-align:right"><div class="amt">$1,850</div><span class="chip">Waiting</span></div></div>
 <div class="row"><svg class="ic2"><use href="#i-quote"/></svg><div class="main"><div class="tt">Addison basement finish</div><div class="dd">Sent Nov 1</div></div><div style="text-align:right"><div class="amt">$2,700</div><span class="chip blue">Answer Fri</span></div></div>
@@ -145,7 +149,8 @@ h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
 <div class="screen" id="money">
 <button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
 <h1>Money</h1>
-<div class="total"><div class="n">$4,025</div><div class="l">out right now</div></div>
+<div class="knows">as far as Matt knows</div>
+<div class="total"><div class="n">$4,025</div><div class="l">owed that Matt knows of</div></div>
 <div class="h2">Who owes you</div>
 <div class="row"><div class="av">B</div><div class="main"><div class="tt">Bistro on Main</div><div class="dd">14 days</div></div><div class="amt">$640</div></div>
 <div class="row" data-go="cust-harrow"><div class="av">H</div><div class="main"><div class="tt">Harrow Construction</div><div class="dd">32 days</div></div><div class="amt">$3,200</div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
@@ -155,6 +160,7 @@ h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
 <div class="screen" id="dates">
 <button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
 <h1>Dates</h1>
+<div class="knows">as far as Matt knows</div>
 <div class="h2">Coming up</div>
 <div class="row"><svg class="ic2"><use href="#i-cal2"/></svg><div class="main"><div class="tt">Inspection - Anderson panel</div><div class="dd">Thu Nov 6</div></div></div>
 <div class="row"><svg class="ic2"><use href="#i-cal2"/></svg><div class="main"><div class="tt">Master license renewal</div><div class="dd">Nov 30</div></div></div>
@@ -165,6 +171,7 @@ h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
 <div class="screen" id="files">
 <button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
 <h1>Files</h1>
+<div class="knows">as far as Matt knows</div>
 <div class="h2">On file</div>
 <div class="row"><svg class="ic2"><use href="#i-files"/></svg><div class="main"><div class="tt">Permit #E-2214.pdf</div><div class="dd">Anderson panel</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
 <div class="row"><svg class="ic2"><use href="#i-files"/></svg><div class="main"><div class="tt">COI - Harrow.pdf</div><div class="dd">Insurance</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
