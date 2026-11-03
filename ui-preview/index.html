@@ -4,95 +4,179 @@
 <style>
 *{box-sizing:border-box}
 body{margin:0;background:#e9e9eb;color:#111;font:17px/1.5 -apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif}
-.screen{max-width:430px;margin:0 auto 40px;background:#fff;min-height:100dvh;display:flex;flex-direction:column;border-left:1px solid #d8d8dc;border-right:1px solid #d8d8dc}
-header{padding:16px 22px 8px}
-.brand{font-weight:800;letter-spacing:-.02em;font-size:20px}
+.screen{display:none;max-width:430px;margin:0 auto;background:#fff;min-height:100dvh;border-left:1px solid #d8d8dc;border-right:1px solid #d8d8dc;padding-bottom:96px}
+.screen.on{display:block}
+header{padding:20px 22px 4px}
+.brand{font-weight:800;letter-spacing:-.02em;font-size:22px}
 .brand span{font-weight:400}
-.date{font-size:14px;color:#595959;margin-top:2px}
-.ropill{display:inline-block;font-size:11px;letter-spacing:.08em;color:#595959;border:1px solid #d8d8dc;border-radius:999px;padding:2px 10px;margin-top:8px}
-.pnav{display:flex;gap:24px;margin:10px 0 0;border-bottom:1px solid #d8d8dc;padding:0 22px}
-.pnav div{font-size:16px;color:#595959;padding:10px 0}
-.pnav .on{color:#111;border-bottom:2px solid #111;font-weight:600}
-main{flex:1;padding:6px 22px 20px}
-h2{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#595959;margin:22px 0 6px;font-weight:600}
-.list{list-style:none;padding:0;margin:0;border-top:1px solid #d8d8dc}
-.list li{padding:13px 0;border-bottom:1px solid #d8d8dc}
-.list b{font-size:16px;display:block}
-.list small{color:#595959;display:block;font-size:13.5px;margin-top:1px}
-.src{color:#8e8e93;font-size:12px;display:block;margin-top:2px}
-.row{display:flex;justify-content:space-between;align-items:baseline;gap:12px}
-.row .amt{font-variant-numeric:tabular-nums;font-weight:600;white-space:nowrap}
-.matt{background:#e9e9eb;border-radius:16px;padding:14px 16px;margin:16px 0 4px;font-size:15.5px}
-.matt b{font-size:13px;letter-spacing:.06em;text-transform:uppercase;color:#595959;display:block;margin-bottom:4px;font-weight:600}
-.matt .act{color:#007aff;font-size:14.5px;display:inline-block;margin-top:8px}
-.total{font-size:14px;color:#595959;margin-top:10px}
-.foot{padding:14px 22px 22px;font-size:13.5px;color:#595959;border-top:1px solid #d8d8dc}
-.foot b{color:#111;font-weight:600}
-.mock{text-align:center;font-size:10px;letter-spacing:.12em;color:#8e8e93;padding:6px 0 10px}
-</style></head><body>
+.sub{font-size:14px;color:#595959;margin-top:2px}
+.back{display:flex;align-items:center;gap:4px;color:#007aff;font-size:16px;padding:16px 22px 0;cursor:pointer;background:none;border:0;font-family:inherit}
+.back svg{flex:none}
+h1{font-size:24px;font-weight:800;letter-spacing:-.02em;margin:8px 22px 2px}
+.h2{font-size:13px;font-weight:600;color:#595959;letter-spacing:.06em;text-transform:uppercase;margin:22px 22px 6px}
+.tiles{display:grid;grid-template-columns:1fr 1fr;gap:12px;padding:16px 22px 4px}
+.tile{background:#fff;border:1px solid #d8d8dc;border-radius:16px;padding:18px 16px;cursor:pointer}
+.tile:active{background:#f4f4f6}
+.tile .ic{width:40px;height:40px;border-radius:12px;background:#eef4ff;display:flex;align-items:center;justify-content:center;margin-bottom:10px}
+.tile .t{font-weight:700;font-size:16px}
+.tile .d{font-size:13px;color:#595959;margin-top:1px}
+.card{margin:14px 22px 0;background:#f4f4f6;border-radius:14px;padding:12px 14px}
+.card .who{font-size:11px;font-weight:700;letter-spacing:.08em;color:#595959}
+.card .msg{margin-top:3px;font-size:15px}
+.card a{color:#007aff;text-decoration:none}
+.row{display:flex;align-items:center;gap:12px;padding:13px 22px;border-top:1px solid #f0f0f2;cursor:pointer}
+.row:first-of-type{border-top:0}
+.row .av{width:38px;height:38px;border-radius:50%;background:#eef4ff;color:#007aff;font-weight:700;display:flex;align-items:center;justify-content:center;flex:none;font-size:15px}
+.row .ic2{width:22px;height:22px;flex:none;color:#595959}
+.row .main{flex:1;min-width:0}
+.row .tt{font-weight:600;font-size:16px}
+.row .dd{font-size:13px;color:#595959}
+.row .amt{font-weight:700;font-size:16px;white-space:nowrap}
+.row .chev{color:#c7c7cc;flex:none}
+.chip{display:inline-block;font-size:12px;font-weight:600;color:#595959;background:#f0f0f2;border-radius:999px;padding:2px 10px}
+.chip.blue{color:#007aff;background:#eef4ff}
+.total{margin:14px 22px 0;padding:18px;border:1px solid #d8d8dc;border-radius:16px;text-align:center}
+.total .n{font-size:32px;font-weight:800;letter-spacing:-.02em}
+.total .l{font-size:13px;color:#595959}
+.mattbar{position:fixed;bottom:0;left:50%;transform:translateX(-50%);width:100%;max-width:430px;background:#fff;border-top:1px solid #d8d8dc;padding:12px 22px calc(12px + env(safe-area-inset-bottom))}
+.mattbar button{width:100%;background:#007aff;color:#fff;border:0;border-radius:14px;padding:14px;font-size:17px;font-weight:700;font-family:inherit;cursor:pointer;display:flex;align-items:center;justify-content:center;gap:8px}
+.mock{text-align:center;font-size:11px;letter-spacing:.12em;color:#aeaeb2;padding:26px 0 10px}
+.kv{display:flex;gap:12px;align-items:flex-start;padding:11px 22px}
+.kv svg{flex:none;margin-top:2px;color:#595959}
+.kv .k{flex:1}
+.kv .v{font-size:16px}
+.kv .s{font-size:13px;color:#595959}
+</style></head>
+<body>
 
-<div class="screen" id="today">
-<header><div class="brand">Breaker<span>Ops</span></div><div class="date">Tuesday, November 3</div><div class="ropill">READ-ONLY - MATT FILES THIS FROM YOUR TEXTS</div></header>
-<nav class="pnav"><div class="on">Today</div><div>Money</div><div>Dates</div></nav>
-<main>
-<h2>Today's jobs</h2>
-<ul class="list">
-<li><div class="row"><b>Panel upgrade - Anderson</b></div><small>8:00 AM - 214 Birch Ln. Permit posted, inspection Thursday.</small><span class="src">from your text Sunday</span></li>
-<li><div class="row"><b>EV charger install - Kowalski</b></div><small>1:00 PM - 88 Cedar Ct. Bring 50A breaker, part picked up yesterday.</small><span class="src">from your text yesterday</span></li>
-<li><div class="row"><b>Service call - Bistro on Main</b></div><small>4:30 PM - flickering lights in the back room.</small><span class="src">from the customer's text to you last night</span></li>
-</ul>
-<div class="matt"><b>Matt</b>
-The quote for the Nelson garage rewire has been out 4 days with no answer. Want me to draft a follow-up text?
-<span class="act">Review draft</span></div>
-<div class="matt"><b>Matt</b>
-The Bistro on Main invoice is 14 days old today. Want me to draft a friendly nudge?
-<span class="act">Review draft</span></div>
-</main>
-<div class="foot"><b>Nothing to type here.</b> Text Matt to add a job, move one, or fix anything on this page.</div>
+<svg width="0" height="0" style="position:absolute"><defs>
+<symbol id="i-jobs" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><rect x="3" y="7" width="18" height="13" rx="2.5"/><path d="M9 7V5.5A1.5 1.5 0 0 1 10.5 4h3A1.5 1.5 0 0 1 15 5.5V7"/></symbol>
+<symbol id="i-cust" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="8" r="3.6"/><path d="M5 20c1.2-3.4 3.9-5 7-5s5.8 1.6 7 5"/></symbol>
+<symbol id="i-quote" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4M9.5 12h5M9.5 16h5"/></symbol>
+<symbol id="i-money" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="1.8" stroke-linecap="round"><circle cx="12" cy="12" r="8.5"/><path d="M12 7.5v9M15 9.3c-.6-1-1.7-1.4-3-1.4-1.6 0-2.8.8-2.8 2.1 0 2.8 5.8 1.4 5.8 4.1 0 1.3-1.3 2.1-3 2.1-1.3 0-2.4-.5-3-1.4"/></symbol>
+<symbol id="i-dates" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></symbol>
+<symbol id="i-files" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M3.5 7a2 2 0 0 1 2-2h4l2 2.5h7a2 2 0 0 1 2 2V17a2 2 0 0 1-2 2h-13a2 2 0 0 1-2-2z"/></symbol>
+<symbol id="i-back" viewBox="0 0 24 24" fill="none" stroke="#007aff" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M14.5 5.5 8 12l6.5 6.5"/></symbol>
+<symbol id="i-chev" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"><path d="M9.5 5.5 16 12l-6.5 6.5"/></symbol>
+<symbol id="i-pin" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M12 21s-6.5-5.3-6.5-10a6.5 6.5 0 0 1 13 0c0 4.7-6.5 10-6.5 10z"/><circle cx="12" cy="10.8" r="2.2"/></symbol>
+<symbol id="i-cal2" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"><rect x="3.5" y="5" width="17" height="16" rx="2.5"/><path d="M3.5 9.5h17M8 3v4M16 3v4"/></symbol>
+<symbol id="i-note" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.8" stroke-linecap="round" stroke-linejoin="round"><path d="M7 3h7l4 4v14a1 1 0 0 1-1 1H7a1 1 0 0 1-1-1V4a1 1 0 0 1 1-1z"/><path d="M14 3v4h4M9.5 12h5M9.5 16h3"/></symbol>
+<symbol id="i-chat" viewBox="0 0 24 24" fill="none" stroke="#fff" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M21 12a8 8 0 0 1-8 8c-1.4 0-2.8-.3-4-1l-4.5 1.5L6 16.3A8 8 0 1 1 21 12z"/></symbol>
+</defs></svg>
+
+<div class="screen on" id="home">
+<header><div class="brand">Breaker<span>Ops</span></div><div class="sub">Tuesday, November 3</div></header>
+<div class="tiles">
+<div class="tile" data-go="jobs"><div class="ic"><svg width="22" height="22"><use href="#i-jobs"/></svg></div><div class="t">Jobs</div><div class="d">3 today</div></div>
+<div class="tile" data-go="customers"><div class="ic"><svg width="22" height="22"><use href="#i-cust"/></svg></div><div class="t">Customers</div><div class="d">12 on file</div></div>
+<div class="tile" data-go="quotes"><div class="ic"><svg width="22" height="22"><use href="#i-quote"/></svg></div><div class="t">Quotes</div><div class="d">2 waiting</div></div>
+<div class="tile" data-go="money"><div class="ic"><svg width="22" height="22"><use href="#i-money"/></svg></div><div class="t">Money</div><div class="d">$4,025 out</div></div>
+<div class="tile" data-go="dates"><div class="ic"><svg width="22" height="22"><use href="#i-dates"/></svg></div><div class="t">Dates</div><div class="d">4 coming up</div></div>
+<div class="tile" data-go="files"><div class="ic"><svg width="22" height="22"><use href="#i-files"/></svg></div><div class="t">Files</div><div class="d">Permits, COIs</div></div>
+</div>
+<div class="card"><div class="who">MATT</div><div class="msg">Harrow Construction is past 30 days. Draft a note? <a href="#money">Review</a></div></div>
 <div class="mock">MOCKUP - NOT REAL DATA</div>
+</div>
+
+<div class="screen" id="jobs">
+<button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
+<h1>Jobs</h1>
+<div class="h2">Today</div>
+<div class="row" data-go="job-anderson"><svg class="ic2"><use href="#i-jobs"/></svg><div class="main"><div class="tt">Panel upgrade</div><div class="dd">Anderson - 8:00 AM</div></div><span class="chip blue">8:00 AM</span><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row" data-go="job-kowalski"><svg class="ic2"><use href="#i-jobs"/></svg><div class="main"><div class="tt">EV charger install</div><div class="dd">Kowalski - 1:00 PM</div></div><span class="chip blue">1:00 PM</span><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row"><svg class="ic2"><use href="#i-jobs"/></svg><div class="main"><div class="tt">Service call</div><div class="dd">Bistro on Main - 4:30 PM</div></div><span class="chip blue">4:30 PM</span><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+</div>
+
+<div class="screen" id="job-anderson">
+<button class="back" data-go="jobs"><svg width="18" height="18"><use href="#i-back"/></svg>Jobs</button>
+<h1>Panel upgrade</h1>
+<div style="margin:4px 22px 0"><span class="chip blue">Scheduled</span></div>
+<div class="h2">Details</div>
+<div class="kv"><svg width="20" height="20"><use href="#i-cust"/></svg><div class="k"><div class="v">Anderson</div><div class="s">Customer</div></div></div>
+<div class="kv"><svg width="20" height="20"><use href="#i-cal2"/></svg><div class="k"><div class="v">Tue Nov 3, 8:00 AM</div></div></div>
+<div class="kv"><svg width="20" height="20"><use href="#i-pin"/></svg><div class="k"><div class="v">214 Birch Ln</div></div></div>
+<div class="kv"><svg width="20" height="20"><use href="#i-note"/></svg><div class="k"><div class="v">Permit posted, inspection Thursday</div></div></div>
+<div class="h2">On file</div>
+<div class="row" data-go="cust-harrow" style="display:none"></div>
+<div class="row" data-go="files"><svg class="ic2"><use href="#i-files"/></svg><div class="main"><div class="tt">Permit #E-2214.pdf</div><div class="dd">Filed by Matt</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+</div>
+
+<div class="screen" id="job-kowalski">
+<button class="back" data-go="jobs"><svg width="18" height="18"><use href="#i-back"/></svg>Jobs</button>
+<h1>EV charger install</h1>
+<div style="margin:4px 22px 0"><span class="chip blue">Scheduled</span></div>
+<div class="h2">Details</div>
+<div class="kv"><svg width="20" height="20"><use href="#i-cust"/></svg><div class="k"><div class="v">Kowalski</div><div class="s">Customer</div></div></div>
+<div class="kv"><svg width="20" height="20"><use href="#i-cal2"/></svg><div class="k"><div class="v">Tue Nov 3, 1:00 PM</div></div></div>
+<div class="kv"><svg width="20" height="20"><use href="#i-pin"/></svg><div class="k"><div class="v">88 Cedar Ct</div></div></div>
+<div class="kv"><svg width="20" height="20"><use href="#i-note"/></svg><div class="k"><div class="v">Bring 50A breaker, part picked up yesterday</div></div></div>
+</div>
+
+<div class="screen" id="customers">
+<button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
+<h1>Customers</h1>
+<div class="h2">On file</div>
+<div class="row" data-go="cust-harrow"><div class="av">H</div><div class="main"><div class="tt">Harrow Construction</div><div class="dd">General contractor</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row"><div class="av">A</div><div class="main"><div class="tt">Anderson</div><div class="dd">Residential</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row"><div class="av">B</div><div class="main"><div class="tt">Bistro on Main</div><div class="dd">Commercial</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row"><div class="av">K</div><div class="main"><div class="tt">Kowalski</div><div class="dd">Residential</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row"><div class="av">N</div><div class="main"><div class="tt">Nelson</div><div class="dd">Residential</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+</div>
+
+<div class="screen" id="cust-harrow">
+<button class="back" data-go="customers"><svg width="18" height="18"><use href="#i-back"/></svg>Customers</button>
+<header><div style="display:flex;align-items:center;gap:12px"><div class="av" style="width:52px;height:52px;border-radius:50%;background:#eef4ff;color:#007aff;font-weight:700;display:flex;align-items:center;justify-content:center;font-size:20px">H</div><div><div class="brand" style="font-size:20px">Harrow Construction</div><div class="sub">General contractor</div></div></div></header>
+<div class="h2">Jobs</div>
+<div class="row"><svg class="ic2"><use href="#i-jobs"/></svg><div class="main"><div class="tt">Rough-in, Building B</div><div class="dd">Done Oct 20</div></div><span class="chip">Done</span></div>
+<div class="h2">Invoices</div>
+<div class="row" data-go="money"><svg class="ic2"><use href="#i-money"/></svg><div class="main"><div class="tt">$3,200</div><div class="dd">Sent Oct 2 - 32 days</div></div><span class="chip">Open</span></div>
+<div class="h2">Dates</div>
+<div class="row" data-go="dates"><svg class="ic2"><use href="#i-cal2"/></svg><div class="main"><div class="tt">Insurance COI renews</div><div class="dd">Dec 15</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+</div>
+
+<div class="screen" id="quotes">
+<button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
+<h1>Quotes</h1>
+<div class="h2">Out</div>
+<div class="row"><svg class="ic2"><use href="#i-quote"/></svg><div class="main"><div class="tt">Nelson garage rewire</div><div class="dd">Sent Oct 30</div></div><div style="text-align:right"><div class="amt">$1,850</div><span class="chip">Waiting</span></div></div>
+<div class="row"><svg class="ic2"><use href="#i-quote"/></svg><div class="main"><div class="tt">Addison basement finish</div><div class="dd">Sent Nov 1</div></div><div style="text-align:right"><div class="amt">$2,700</div><span class="chip blue">Answer Fri</span></div></div>
 </div>
 
 <div class="screen" id="money">
-<header><div class="brand">Breaker<span>Ops</span></div><div class="date">Money</div><div class="ropill">READ-ONLY - MATT FILES THIS FROM YOUR TEXTS</div></header>
-<nav class="pnav"><div>Today</div><div class="on">Money</div><div>Dates</div></nav>
-<main>
-<h2>Who owes you</h2>
-<ul class="list">
-<li><div class="row"><b>Bistro on Main</b><span class="amt">$640</span></div><small>Invoice sent Oct 20 - 14 days</small><span class="src">from your text Oct 20</span></li>
-<li><div class="row"><b>Harrow Construction</b><span class="amt">$3,200</span></div><small>Invoice sent Oct 2 - 32 days</small><span class="src">from your text Oct 2</span></li>
-<li><div class="row"><b>Peterson (service call)</b><span class="amt">$185</span></div><small>Invoice sent Oct 30 - 4 days</small><span class="src">from your text Oct 30</span></li>
-</ul>
-<div class="total">$4,025 out right now</div>
-<h2>Quotes out</h2>
-<ul class="list">
-<li><div class="row"><b>Nelson garage rewire</b><span class="amt">$1,850</span></div><small>Sent Oct 30 - no answer yet</small><span class="src">from your text Oct 30</span></li>
-<li><div class="row"><b>Addison basement finish</b><span class="amt">$2,700</span></div><small>Sent Nov 1 - they said Friday</small><span class="src">from your text Nov 1</span></li>
-</ul>
-<div class="matt"><b>Matt</b>
-Harrow Construction is past 30 days. Want me to draft a firmer note, or would you rather call them?
-<span class="act">Review draft</span></div>
-</main>
-<div class="foot"><b>Paid or wrong?</b> Text Matt "Harrow paid" and he marks it. Books stay in QuickBooks.</div>
-<div class="mock">MOCKUP - NOT REAL DATA</div>
+<button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
+<h1>Money</h1>
+<div class="total"><div class="n">$4,025</div><div class="l">out right now</div></div>
+<div class="h2">Who owes you</div>
+<div class="row"><div class="av">B</div><div class="main"><div class="tt">Bistro on Main</div><div class="dd">14 days</div></div><div class="amt">$640</div></div>
+<div class="row" data-go="cust-harrow"><div class="av">H</div><div class="main"><div class="tt">Harrow Construction</div><div class="dd">32 days</div></div><div class="amt">$3,200</div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row"><div class="av">P</div><div class="main"><div class="tt">Peterson</div><div class="dd">4 days</div></div><div class="amt">$185</div></div>
 </div>
 
 <div class="screen" id="dates">
-<header><div class="brand">Breaker<span>Ops</span></div><div class="date">Dates</div><div class="ropill">READ-ONLY - MATT FILES THIS FROM YOUR TEXTS</div></header>
-<nav class="pnav"><div>Today</div><div>Money</div><div class="on">Dates</div></nav>
-<main>
-<h2>Coming up</h2>
-<ul class="list">
-<li><div class="row"><b>Inspection - Anderson panel</b></div><small>Thursday Nov 6, morning window. Permit #E-2214.</small><span class="src">from your text Sunday</span></li>
-<li><div class="row"><b>Master license renewal</b></div><small>Due Nov 30. CE hours done, just file.</small><span class="src">from your text Oct 12</span></li>
-<li><div class="row"><b>Liability insurance renewal</b></div><small>Renews Dec 15. COI for Harrow expires the same week.</small><span class="src">from your text Oct 20</span></li>
-<li><div class="row"><b>Estimated taxes</b></div><small>Q4 payment due Jan 15.</small><span class="src">Matt added this - standard quarterly date</span></li>
-</ul>
-<div class="matt"><b>Matt</b>
-Your license renewal is 4 weeks out. I will remind you again at 2 weeks and 3 days. Nothing to do yet.
-</div>
-</main>
-<div class="foot"><b>Tell Matt a date once.</b> He files it and keeps an eye on it. Changed? Text him.</div>
-<div class="mock">MOCKUP - NOT REAL DATA</div>
+<button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
+<h1>Dates</h1>
+<div class="h2">Coming up</div>
+<div class="row"><svg class="ic2"><use href="#i-cal2"/></svg><div class="main"><div class="tt">Inspection - Anderson panel</div><div class="dd">Thu Nov 6</div></div></div>
+<div class="row"><svg class="ic2"><use href="#i-cal2"/></svg><div class="main"><div class="tt">Master license renewal</div><div class="dd">Nov 30</div></div></div>
+<div class="row"><svg class="ic2"><use href="#i-cal2"/></svg><div class="main"><div class="tt">Liability insurance renewal</div><div class="dd">Dec 15</div></div></div>
+<div class="row"><svg class="ic2"><use href="#i-cal2"/></svg><div class="main"><div class="tt">Estimated taxes, Q4</div><div class="dd">Jan 15</div></div></div>
 </div>
 
+<div class="screen" id="files">
+<button class="back" data-go="home"><svg width="18" height="18"><use href="#i-back"/></svg>Home</button>
+<h1>Files</h1>
+<div class="h2">On file</div>
+<div class="row"><svg class="ic2"><use href="#i-files"/></svg><div class="main"><div class="tt">Permit #E-2214.pdf</div><div class="dd">Anderson panel</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row"><svg class="ic2"><use href="#i-files"/></svg><div class="main"><div class="tt">COI - Harrow.pdf</div><div class="dd">Insurance</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+<div class="row"><svg class="ic2"><use href="#i-files"/></svg><div class="main"><div class="tt">Panel photo.jpg</div><div class="dd">Anderson panel</div></div><svg class="chev" width="18" height="18"><use href="#i-chev"/></svg></div>
+</div>
+
+<div class="mattbar"><button id="mattbtn"><svg width="20" height="20"><use href="#i-chat"/></svg>Text Matt</button></div>
+
+<script>
+function go(id){document.querySelectorAll('.screen').forEach(s=>s.classList.toggle('on',s.id===id));window.scrollTo(0,0);if(('#'+id)!==location.hash)history.replaceState(null,'','#'+id);}
+document.querySelectorAll('[data-go]').forEach(el=>el.addEventListener('click',()=>go(el.dataset.go)));
+document.getElementById('mattbtn').addEventListener('click',()=>{});
+const h=location.hash.slice(1);if(h&&document.getElementById(h))go(h);
+</script>
 </body></html>
