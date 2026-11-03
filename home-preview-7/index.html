@@ -80,7 +80,7 @@
   .signup input{width:100%;max-width:330px;background:var(--bar);border:1px solid var(--barline);border-radius:14px;padding:14px 16px;color:#fff;font-size:16px;font-family:inherit;outline:none}
   .signup button{width:100%;max-width:330px;background:#6b9bff;color:#fff;border:none;border-radius:14px;padding:15px 16px;font-size:16px;font-weight:600;font-family:inherit;cursor:pointer}
   .signup .sprice{color:#6b9bff;font-size:15px;font-weight:600;margin:-4px 0 6px}
-  .signup .sconsent{display:none;color:#636366;font-size:10.5px;line-height:1.5;max-width:330px}
+  .signup .sconsent{display:block;color:#636366;font-size:10.5px;line-height:1.5;max-width:330px}
   .signup .sconsent a{color:#636366}
   .signup .sthanks{display:none;color:#e8e8ed;font-size:17px;line-height:1.5}
   .signup .sthanks span{color:#636366;font-size:12px}
@@ -103,7 +103,7 @@
     <div class="snm">Matt</div>
     <div class="stext">BreakerOps is Matt, a friendly assistant for electricians who run their own shop. He keeps track of jobs, quotes, invoices, and who owes you, and texts you when something needs doing.</div>
     <div class="sprice">Free your first week, then $20 a month.</div>
-    <input id="inp2" autocomplete="off" autocapitalize="none" placeholder="Cell number or email">
+    <input id="inp2" type="tel" inputmode="tel" autocomplete="off" placeholder="Cell number">
     <button id="go">Sign up</button>
     <div class="sconsent" id="sconsent">By signing up with your number you agree to receive texts from BreakerOps. Reply STOP to opt out. <a href="/terms/">Terms</a> &middot; <a href="/sms-terms/">SMS Terms</a> &middot; <a href="/privacy/">Privacy</a></div>
     <div class="sthanks" id="sthanks">Thanks!<br><span>Preview concept. Nothing was sent and no one was signed up.</span></div>
@@ -124,10 +124,6 @@
     pill.style.display='none';dots.style.display='none';note.style.display='none';deck.style.display='none';
     signup.style.display='flex';
   };
-  inp2.addEventListener('input',function(){
-    var v=inp2.value,digits=v.replace(/\D/g,'');
-    sconsent.style.display=(v.indexOf('@')===-1&&digits.length>=7)?'block':'none';
-  });
   go.onclick=function(){
     if(!inp2.value.trim()){inp2.focus();return}
     inp2.style.display='none';go.style.display='none';sconsent.style.display='none';
