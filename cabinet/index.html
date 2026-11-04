@@ -185,7 +185,7 @@ function render(){
   $('needs').querySelectorAll('[data-dact]').forEach(b=>b.onclick=()=>draftAction(b));
 
   const st=stalled();
-  $('nudge').innerHTML = `<h2>Worth a nudge</h2><span class="quiet">One reminder per quote, ${STALL_DAYS} quiet days after it goes out. <button id="stallcfg" style="margin:0;font-size:13px">change</button></span>`+(st.length?st.map(x=>`<div class="row"><span class="what">${esc(jobName(x.job_id)||'A customer')} - ${money(x.amount_cents)}</span><span class="meta">Quoted ${daysWord(daysSince(x.quoted_at))} ago, no answer yet.</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Nudged</button></span></div>`).join(''):'');
+  $('nudge').innerHTML = `<h2>Worth a nudge</h2><span class="quiet">One reminder per quote, ${STALL_DAYS} quiet days after it goes out. <button id="stallcfg" style="margin:0;font-size:13px">change</button></span>`+(st.length?st.map(x=>`<div class="row"><span class="what">${esc(jobName(x.job_id)||'A customer')} - ${money(x.amount_cents)}</span><span class="meta">Quoted ${daysWord(daysSince(x.quoted_at))} ago, no answer yet.</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Mark as nudged</button></span></div>`).join(''):'');
   $('stallcfg').onclick=()=>{
     const v=prompt('Remind me about an unanswered quote after how many days?',String(STALL_DAYS));
     const n=parseInt(v,10);if(Number.isFinite(n)&&n>0&&n<365){STALL_DAYS=n;localStorage.setItem('stallDays',String(n));render();}
@@ -197,11 +197,11 @@ function render(){
   let m='';
   if(open.length){m+=open.map(i=>{
     const days=i.due_at?daysSince(i.due_at):null;
-    const obs=(payByInv[i.id]||[]).map(p=>`<span class="meta">Heard from you: ${money(p.amount_cents)}${p.note?' - '+esc(p.note):''}</span>`).join('');
+    const obs=(payByInv[i.id]||[]).map(p=>`<span class="meta">Customer says: ${money(p.amount_cents)}${p.note?' - '+esc(p.note):''} - not received yet</span>`).join('');
     return `<div class="row"><span class="what">${esc(jobName(i.job_id)||'(no job)')} - ${money(i.amount_cents)}</span><span class="meta">${days!=null&&days>0?days+' days out':'not due yet'}</span>${obs}</div>`;
   }).join('');}
   const oq=openQuotes();
-  if(oq.length){m+=oq.map(x=>`<div class="row"><span class="what">Quote: ${esc(jobName(x.job_id||x.customer_id)||'(no job)')} - ${money(x.amount_cents)}</span><span class="meta">${daysWord(daysSince(x.quoted_at))} old${x.nudge_count?', nudged '+x.nudge_count+'x':''}</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Nudged</button><button data-nact="won" data-id="${x.id}">Won</button><button data-nact="lost" data-id="${x.id}">Lost</button></span></div>`).join('');}
+  if(oq.length){m+=oq.map(x=>`<div class="row"><span class="what">Quote: ${esc(jobName(x.job_id||x.customer_id)||'(no job)')} - ${money(x.amount_cents)}</span><span class="meta">${daysWord(daysSince(x.quoted_at))} old${x.nudge_count?', nudged '+x.nudge_count+'x':''}</span><span><button data-nact="nudge" data-id="${x.id}" data-n="${x.nudge_count}">Mark as nudged</button><button data-nact="won" data-id="${x.id}">Won</button><button data-nact="lost" data-id="${x.id}">Lost</button></span></div>`).join('');}
   const ub=unbilled();
   if(ub.length){m+=ub.map(e=>{
     const next=e.state==='recorded'?'<button data-eact="priced" data-id="'+e.id+'">Priced</button>':e.state==='priced'?'<button data-eact="approved" data-id="'+e.id+'">Approve</button>':e.state==='approved'?'<button data-eact="invoiced" data-id="'+e.id+'">Billed</button>':'';
