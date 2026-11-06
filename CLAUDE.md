@@ -12,6 +12,7 @@ BreakerOps is a text-first assistant for electrical contractors with 1 to 3 truc
 6. No tax, legal, HR, insurance, or payroll advice. Matt never speaks as the owner without per-message approval. No payments or passwords held.
 7. Never put secrets, customer data, signups, or leads in this repo. It is public. Publishable keys only.
 8. When unsure, stop and ask Jake instead of guessing.
+9. Every admin-only SQL function needs BOTH guards, every time: revoke EXECUTE from PUBLIC and anon (grant only to authenticated and service_role), and a NULL-safe admin check such as `if not coalesce(is_admin(), false) then raise exception 'not allowed'; end if;`. A bare `if not is_admin()` silently passes for anonymous callers because the comparison returns NULL, and a default-granted function is callable by anyone holding the publishable key. `is_admin()` itself must never return NULL.
 
 ## How work happens
 
