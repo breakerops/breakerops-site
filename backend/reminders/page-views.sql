@@ -28,3 +28,8 @@ begin
       group by page order by count(*) desc limit 10) p)
   ));
 end $$;
+
+-- Admin-only: no PUBLIC/anon execute; Jake's admin session is authenticated,
+-- edge functions use service_role. (Applied to production 2026-11-06.)
+revoke all on function public.page_views_summary(integer) from public, anon;
+grant execute on function public.page_views_summary(integer) to authenticated, service_role;
