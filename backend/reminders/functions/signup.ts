@@ -9,6 +9,13 @@
 // detail. STOP opt-outs are never texted; the caller gets the same answer.
 // Rate limits (counted from signup_verifications rows): 1 code per phone per
 // 60s, 4 per phone per day, 10 starts per IP per day, 50 codes per day total.
+// start answers every outcome with the same neutral 200 (rate limits and send
+// failures are logged, never told), and verify answers registered numbers and
+// missing/expired codes with the same wrong-code error, so responses cannot
+// reveal whether a number has signed up. A request with no "action" field is
+// treated as a legacy homepage and stores the signup like the old function did,
+// so a cached page never loses signups during rollout. The pepper is required:
+// if SIGNUP_CODE_PEPPER is unset the function refuses to run.
 // IP is the platform connecting IP (x-real-ip, else the last X-Forwarded-For
 // hop), never the first client-supplied hop. Consent text is a server-side
 // constant; the client cannot supply or alter it.
@@ -79,8 +86,14 @@ Deno.serve(async (req) => {
   if (req.method === "OPTIONS") return new Response("ok", { headers: CORS });
   try {
     const p = await req.json().catch(() => ({}));
+    if (!PEPPER) {
+      // Fail closed: without the server-side pepper, codes would be hashable
+      // from the phone number alone.
+      console.error("SIGNUP_CODE_PEPPER is not set");
+      return json({ error: GENERIC_ERR }, 500);
+    }
     if (p.hp) return json({ ok: true, v: V }); // honeypot: pretend, store nothing
-    const action = String(p.action || "start");
+    const action = String(p.action || "legacy");
     const e164 = toE164(p.phone);
     if (!e164) return json({ error: "Enter a valid US mobile number.", v: V }, 400);
     const ip =
@@ -88,6 +101,37 @@ Deno.serve(async (req) => {
       (req.headers.get("x-forwarded-for") || "").split(",").pop()?.trim() ||
       "unknown";
     const ipHash = await sha256hex("ip:" + ip);
+
+    if (action === "legacy") {
+      // Old or cached homepage: store the signup like the previous function
+      // did, so no signup is lost while the new page rolls out.
+      const { data: created, error } = await supabase
+        .from("signups")
+        .upsert(
+          { phone: e164, consent_text: CONSENT_TEXT, source: String(p.source || "breakerops.com").slice(0, 100) },
+          { onConflict: "phone", ignoreDuplicates: true }
+        )
+        .select("id");
+      if (error) {
+        console.error("legacy insert failed", error);
+        return json({ error: GENERIC_ERR }, 500);
+      }
+      if (created && created.length > 0) {
+        const note = fetch("https://formsubmit.co/ajax/nick@breakerops.com", {
+          method: "POST",
+          headers: { "Content-Type": "application/json", Accept: "application/json", Referer: "https://www.breakerops.com/text/" },
+          body: JSON.stringify({
+            _subject: "New BreakerOps signup",
+            phone: e164,
+            source: String(p.source || "breakerops.com"),
+            time: new Date().toISOString(),
+            _template: "table",
+          }),
+        }).catch(() => {});
+        try { (globalThis as any).EdgeRuntime?.waitUntil?.(note); } catch (_) { /* ignore */ }
+      }
+      return json({ ok: true }, 201);
+    }
 
     if (action === "start") {
       // Neutral path for already-registered numbers: no code, no new
@@ -108,10 +152,10 @@ Deno.serve(async (req) => {
         supabase.from("signup_verifications").select("id", { count: "exact", head: true }).eq("ip_hash", ipHash).gte("created_at", dayAgo),
         supabase.from("signup_verifications").select("id", { count: "exact", head: true }).gte("created_at", dayAgo),
       ]);
-      if ((perMin.count ?? 0) >= 1) return json({ error: "Code already sent. Give it a minute.", v: V }, 429);
-      if ((perDay.count ?? 0) >= 4) return json({ error: TOO_MANY, v: V }, 429);
-      if ((perIp.count ?? 0) >= 10) return json({ error: TOO_MANY, v: V }, 429);
-      if ((perAll.count ?? 0) >= 50) return json({ error: TOO_MANY, v: V }, 429);
+      if ((perMin.count ?? 0) >= 1) { console.error("rate: phone minute"); return json({ ok: true, v: V }); }
+      if ((perDay.count ?? 0) >= 4) { console.error("rate: phone day"); return json({ ok: true, v: V }); }
+      if ((perIp.count ?? 0) >= 10) { console.error("rate: ip day"); return json({ ok: true, v: V }); }
+      if ((perAll.count ?? 0) >= 50) { console.error("rate: global day"); return json({ ok: true, v: V }); }
 
       const code = makeCode();
       const row = {
@@ -134,13 +178,13 @@ Deno.serve(async (req) => {
         if (cerr || !conn?.api_key) {
           console.error("telnyx connection missing", cerr);
           await supabase.from("signup_verifications").delete().eq("id", ins.id);
-          return json({ error: GENERIC_ERR, v: V }, 500);
+          return json({ ok: true, v: V });
         }
         const sent = await sendCode(conn, e164, code);
         if (!sent.ok) {
           console.error("telnyx send failed", sent.error);
           await supabase.from("signup_verifications").delete().eq("id", ins.id);
-          return json({ error: "Could not send the code. Try again.", v: V }, 502);
+          return json({ ok: true, v: V });
         }
       }
       return json({ ok: true, v: V }, 200);
@@ -160,8 +204,10 @@ Deno.serve(async (req) => {
         return json({ error: GENERIC_ERR, v: V }, 500);
       }
       const v = rows?.[0];
+      // Same answer for a registered number, no code, an expired code, or a
+      // used code: indistinguishable from a wrong guess.
       if (!v || v.verified_at || new Date(v.expires_at).getTime() < Date.now()) {
-        return json({ error: "No active code. Tap Sign up again for a new one.", v: V }, 400);
+        return json({ error: "That code does not match. Try again.", v: V }, 400);
       }
       if ((v.attempts ?? 0) >= 5) {
         return json({ error: "Too many wrong tries. Tap Sign up again for a new code.", v: V }, 429);
