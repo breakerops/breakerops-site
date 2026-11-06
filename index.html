@@ -214,8 +214,8 @@
         headers:{'Content-Type':'application/json'},
         body:JSON.stringify({action:'start',phone:e164,hp:hp.value,consent:consentTxt,source:srcTxt})
       }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(res){
-        if(res.ok&&res.j.already){localStorage.setItem('bo-wl-'+e164,'1');finish();return}
-        if(res.ok){curPhone=e164;showCode();return}
+        if(res.ok&&res.j&&res.j.v===2){curPhone=e164;showCode();return}
+        if(res.ok){localStorage.setItem('bo-wl-'+e164,'1');finish();return}
         showErr((res.j&&res.j.error)||'Something went wrong. Try again.');
       }).catch(function(){
         showErr('Could not reach the server. Check your connection and try again.');
