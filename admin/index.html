@@ -52,7 +52,7 @@ table.su td.t{white-space:normal;font-size:12px}}
 <label for="pw">Password</label>
 <input id="pw" type="password" autocomplete="current-password">
 <button id="signin">Sign in</button>
-<button id="reset" class="ghost">Set or reset my password</button>
+<p class="sub" style="margin-top:12px">Forgot your password? <button id="reset" class="ghost" type="button">Email me a reset link</button></p>
 <p class="msg err" id="autherr" hidden></p>
 <p class="msg" id="authnote" hidden></p>
 </div>
@@ -136,6 +136,13 @@ table.su td.t{white-space:normal;font-size:12px}}
 <p class="msg" id="m-daylink"></p>
 </div>
 
+<h1>Site visits</h1>
+<p class="sub">Anonymous page views on breakerops.com. No cookies, no IPs stored; uniques are a daily hash.</p>
+<div class="card">
+<p class="status" id="s-visits">Loading...</p>
+<div id="visits"></div>
+</div>
+
 <h1>Signups</h1>
 <p class="sub">Everyone who left their number on the site, newest first. Nothing texts them yet.</p>
 <div class="card">
@@ -195,7 +202,7 @@ function showApp(session){
  if(em!==OWNER){sb.auth.signOut();err('autherr','Owner access only.');return;}
  $('auth').hidden=true;$('newpw').hidden=true;$('app').hidden=false;
  $('who').textContent=session.user.email;
- loadStatus();loadUsage();loadModel();loadSignups();loadDayLink();
+ loadStatus();loadUsage();loadModel();loadSignups();loadDayLink();loadVisits();
 }
 
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return {'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
@@ -214,6 +221,29 @@ function loadSignups(){
    h+='<tr><td class="t">'+when+'</td><td>'+esc(x.phone)+'<div class="c">'+esc(x.consent_text)+'</div></td><td>'+esc(x.source)+'</td></tr>';
   });
   box.innerHTML=h+'</table>';
+ });
+}
+
+function loadVisits(){
+ sb.rpc('page_views_summary',{days_back:14}).then(function(r){
+  var e=$('s-visits'),box=$('visits');
+  if(r.error){e.textContent='Could not load visits.';return;}
+  var d=r.data||{},daily=d.daily||[],pages=d.top_pages||[];
+  if(!daily.length){e.textContent='No visits recorded yet.';return;}
+  e.textContent='Last 14 days.';
+  var h='<table class="su">';
+  daily.slice().reverse().forEach(function(x){
+   h+='<tr><td class="t">'+esc(x.day)+'</td><td>'+x.visits+' visits</td><td>'+x.uniques+' unique</td></tr>';
+  });
+  h+='</table>';
+  if(pages.length){
+   h+='<table class="su"><tr><td class="t"><b>Page</b></td><td><b>Visits</b></td><td><b>Unique</b></td></tr>';
+   pages.forEach(function(x){
+    h+='<tr><td class="t">'+esc(x.page)+'</td><td>'+x.visits+'</td><td>'+x.uniques+'</td></tr>';
+   });
+   h+='</table>';
+  }
+  box.innerHTML=h;
  });
 }
 
