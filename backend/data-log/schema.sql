@@ -15,7 +15,9 @@ create table if not exists public.reply_feedback (
   created_at timestamptz not null default now()
 );
 alter table public.reply_feedback enable row level security;
--- Service role only, same posture as inbound_messages: no public read policy yet.
+-- No select policy: service role only, same posture as model_providers.
+-- (inbound_messages additionally grants app roles select+insert; add grants
+-- here only when an app role genuinely needs them.)
 create index if not exists reply_feedback_biz_idx
   on public.reply_feedback (business_id, created_at desc);
 
@@ -43,6 +45,8 @@ create index if not exists doc_embeddings_biz_idx
 create index if not exists doc_embeddings_vec_idx
   on public.doc_embeddings using hnsw (embedding vector_cosine_ops)
   where embedding is not null;
+-- Retrieval queries must also filter WHERE embedding IS NOT NULL: rows sit
+-- unembedded until the embedding job runs, and null vectors must never rank.
 
 -- 3. eval_questions + eval_runs: a small set of real questions with known-right
 -- answers, used to grade providers against each other. This becomes the
