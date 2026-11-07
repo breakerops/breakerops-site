@@ -33,9 +33,13 @@ replied, with sources and approval state). These tables close the loop:
 
 ## Privacy
 
-- Rows are partitioned by `business_id`; one shop's data never enters
-  another shop's context. (`eval_questions.business_id` is nullable: null
-  means a general question not tied to one shop.)
+- Rows carry `business_id` to scope them to a shop
+  (`eval_questions.business_id` is nullable: null means a general question
+  not tied to one shop; `eval_runs` carries none and scopes through its
+  question). Isolation between shops is design intent, not something these
+  tables enforce today: it depends on the future jobs scoping every query
+  by `business_id`, and on suitable RLS policies before any app role gets
+  access.
 - These tables alone enforce nothing beyond RLS. The following are the
   binding rules for the jobs that will use this data (embedding job, feedback
   capture, eval runner), to be enforced when those jobs are built:
