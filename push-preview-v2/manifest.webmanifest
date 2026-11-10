@@ -9,15 +9,22 @@
   "theme_color": "#648ea9",
   "icons": [
     {
-      "src": "/assets/img/calendar-icon-256.png",
-      "sizes": "256x256",
+      "src": "/push-preview-v2/icons/icon-192.png",
+      "sizes": "192x192",
       "type": "image/png",
       "purpose": "any"
     },
     {
-      "src": "/assets/img/apple-touch-icon.png",
-      "sizes": "180x180",
-      "type": "image/png"
+      "src": "/push-preview-v2/icons/icon-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/push-preview-v2/icons/icon-maskable-512.png",
+      "sizes": "512x512",
+      "type": "image/png",
+      "purpose": "maskable"
     }
   ]
 }
