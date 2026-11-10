@@ -1,6 +1,6 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
-<title>BreakerOps | Push preview</title><meta name="apple-mobile-web-app-title" content="Calendar"><meta name="robots" content="noindex,nofollow">
+<title>BreakerOps | Push preview</title><meta name="apple-mobile-web-app-title" content="BreakerOps"><meta name="robots" content="noindex,nofollow">
 <script>var boColors={p:'#246779',s:'#648ea9'};
 function boIsHex(v){return typeof v==='string'&&/^#[0-9a-f]{6}$/i.test(v)}
 function boHx(h){h=h.replace('#','');var n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255]}
@@ -19,7 +19,7 @@ function applyBoColors(p,s,sync){try{
  '--bar-top':boMix(s,'#000000',0.06),'--bar-bottom':boMix(s,'#ffffff',0.62)};
  for(var k in v)r.setProperty(k,v[k]);
  localStorage.setItem('bo-colors',JSON.stringify({p:p,s:s}));
- if(sync){var pp=document.getElementById('pick-p'),ps=document.getElementById('pick-s');if(pp)pp.value=p;if(ps)ps.value=s}
+ if(sync&&window.boSyncSwatches)window.boSyncSwatches(p,s)
 }catch(e){}}
 try{localStorage.removeItem("bo-theme-vars")}catch(e){}
 try{var c=JSON.parse(localStorage.getItem("bo-colors")||"null");if(c)applyBoColors(c.p,c.s)}catch(e){}</script>
@@ -70,14 +70,16 @@ input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background
 label{display:block;text-align:left;font-size:14px;font-weight:600}
 .note{font-size:11px;color:#6b7d88;margin-top:22px}
 button[type=submit]{background:var(--accent);color:#fff}
+button.auth-alt{display:inline-block;width:auto;background:none;color:#485661;font-size:13px;font-weight:600;text-decoration:underline;padding:2px 0 4px;margin:0;box-shadow:none;min-height:0;border-radius:0}
 
 .theme-pick{margin:14px 0 4px}
 .theme-label{font-size:12px;color:#485661;margin:0 0 8px;text-align:left}
-.color-rows{display:flex;gap:26px;justify-content:center}
-.color-rows label{display:flex;flex-direction:column;align-items:center;gap:7px;font-size:13px;color:#485661;font-weight:600}
-.color-rows input[type=color]{width:52px;height:52px;border:2px solid #ffffff90;border-radius:14px;padding:0;background:none;cursor:pointer;box-shadow:0 3px 10px #25394722}
-.color-rows input[type=color]::-webkit-color-swatch-wrapper{padding:3px}
-.color-rows input[type=color]::-webkit-color-swatch{border:none;border-radius:9px}
+.color-rows{display:flex;flex-direction:column;gap:10px}
+.swrow{display:flex;align-items:center;gap:10px}
+.swrow span{font-size:13px;color:#485661;font-weight:600;min-width:70px;text-align:left}
+.sws{display:flex;gap:6px;flex-wrap:wrap;max-width:172px}
+button.sw{width:38px;min-width:38px;flex:0 0 38px;height:38px;border-radius:50%;border:2px solid #fff;box-shadow:0 1px 4px #25394722;padding:0;margin:0;cursor:pointer}
+button.sw.chosen{outline:2px solid var(--accent);outline-offset:2px}
 .bar-top,.bar-bottom{position:fixed;left:0;width:100%;height:11px;z-index:9999;pointer-events:none}
 .bar-top{top:0;background:var(--bar-top)}
 .bar-bottom{bottom:0;background:var(--bar-bottom)}
@@ -105,15 +107,16 @@ button[type=submit]{background:var(--accent);color:#fff}
 <button class="setup" id="retry" hidden>Check again</button>
 <form id="signin" hidden>
 <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
-<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
+<label for="password">Password</label><input id="password" type="password" autocomplete="new-password" minlength="6" required>
 <div class="theme-pick" id="theme-pick">
 <p class="theme-label">Pick your colors - you can change them later</p>
 <div class="color-rows">
-<label>Primary<input type="color" id="pick-p" value="#246779"></label>
-<label>Secondary<input type="color" id="pick-s" value="#648ea9"></label>
+<div class="swrow"><span>Primary</span><div class="sws" id="sw-p"></div></div>
+<div class="swrow"><span>Secondary</span><div class="sws" id="sw-s"></div></div>
 </div>
 </div>
-<button type="submit">Sign in to preview</button>
+<button type="submit" id="auth-go">Create account</button>
+<button type="button" class="auth-alt" id="auth-alt">Already have a login? Sign in</button>
 </form>
 <div class="status" id="status" role="status"></div>
 <div class="note">Preview only. Your current reminders are unchanged.</div>
@@ -146,18 +149,15 @@ function step(n,title,copy){
 }
 async function refresh(){
  if(!isInstalled()){
-  step(1,'Add to your Home Screen','One iPhone step first. Use the browser menu to add this page, then open the new Calendar icon. The next step appears there.');
+  step(1,'Add to your Home Screen','One iPhone step first. Use the browser menu to add this page, then open the new BreakerOps icon. The next step appears there.');
   $('setup').hidden=false;
   return;
  }
  const {data,error}=await sb.auth.getSession(); session=data.session;
- if(error || !session){
-  step(2,'Sign in','Use your existing BreakerOps login. Home Screen apps may ask you to sign in separately from Safari.');
-  $('signin').hidden=false; return;
- }
+ if(error || !session){boSetMode('create'); return;}
  const verified=await sb.auth.getUser();user=verified.data.user;
  if(user){try{if(localStorage.getItem(completionKey(user.id))==='yes'){openCalendar();return}}catch(_){}}
- if(!user){step(2,'Sign in again','Your session needs to be refreshed.');$('signin').hidden=false;return}
+ if(!user){boSetMode('signin','Your session needs to be refreshed.');return}
  if(user.user_metadata&&user.user_metadata.colors&&user.user_metadata.colors.p)applyBoColors(user.user_metadata.colors.p,user.user_metadata.colors.s||'#648ea9',true);
  step(3,'Allow notifications','Tap Enable notifications, then Allow on the iPhone prompt. This lets BreakerOps send this preview test.');
  $('enable').hidden=false;
@@ -208,22 +208,58 @@ function applyBoColors(p,s,sync){try{
  '--bar-top':boMix(s,'#000000',0.06),'--bar-bottom':boMix(s,'#ffffff',0.62)};
  for(var k in v)r.setProperty(k,v[k]);
  localStorage.setItem('bo-colors',JSON.stringify({p:p,s:s}));
- if(sync){var pp=document.getElementById('pick-p'),ps=document.getElementById('pick-s');if(pp)pp.value=p;if(ps)ps.value=s}
+ if(sync&&window.boSyncSwatches)window.boSyncSwatches(p,s)
 }catch(e){}}
 var boTouched=false;
-$('pick-p').oninput=e=>{boTouched=true;applyBoColors(e.target.value,$('pick-s').value)};
-$('pick-s').oninput=e=>{boTouched=true;applyBoColors($('pick-p').value,e.target.value)};
+const BO_PRIMARY=['#246779','#2f6f9f','#4f5fbf','#7052ae','#a04f30','#2e7d5b','#8e4a67','#4b5c6b'];
+const BO_SECONDARY=['#648ea9','#5f9ea0','#7e93c4','#9b7ec4','#c98a5e','#6aa88f','#c2a35e','#8fa3b8'];
+window.boSyncSwatches=function(p,s){document.querySelectorAll('#sw-p .sw').forEach(b=>b.classList.toggle('chosen',b.dataset.color===p));document.querySelectorAll('#sw-s .sw').forEach(b=>b.classList.toggle('chosen',b.dataset.color===s))};
+function boBuildSwatches(el,colors,which){colors.forEach(c=>{const b=document.createElement('button');b.type='button';b.className='sw';b.style.background=c;b.dataset.color=c;b.setAttribute('aria-label',which+' '+c);b.onclick=()=>{boTouched=true;if(which==='primary')applyBoColors(c,boColors.s,true);else applyBoColors(boColors.p,c,true)};el.appendChild(b)})}
+boBuildSwatches($('sw-p'),BO_PRIMARY,'primary');boBuildSwatches($('sw-s'),BO_SECONDARY,'secondary');
+boSyncSwatches(boColors.p,boColors.s);
+let boMode='create';
+function boSetMode(m,copy){
+ boMode=m;
+ if(m==='create'){
+  step(2,'Create your account','Pick an email, a password, and your colors. This creates your BreakerOps login.');
+  $('password').setAttribute('autocomplete','new-password');
+  $('auth-go').textContent='Create account';
+  $('auth-alt').textContent='Already have a login? Sign in';
+ }else{
+  step(2,'Sign in',copy||'Use your existing BreakerOps login. Home Screen apps may ask you to sign in separately from Safari.');
+  $('password').setAttribute('autocomplete','current-password');
+  $('auth-go').textContent='Sign in to preview';
+  $('auth-alt').textContent='New here? Create an account';
+ }
+ $('signin').hidden=false;
+}
+$('auth-alt').onclick=()=>{boSetMode(boMode==='create'?'signin':'create')};
 $('signin').onsubmit=async(e)=>{
- e.preventDefault();say('Signing in...');
- const button=$('signin').querySelector('button');button.disabled=true;
+ e.preventDefault();
+ const button=$('auth-go');button.disabled=true;
  try{
-  const {data:siData,error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
-  $('password').value='';
-  if(error){say('Sign-in failed. Check your email and password.');return}
-  try{var um=(siData&&siData.user&&siData.user.user_metadata)||{};
-  if(boTouched||!um.colors){var merged={};for(var k in um)merged[k]=um[k];merged.colors={p:boColors.p,s:boColors.s};await sb.auth.updateUser({data:merged})}}catch(e){}
-  await refresh();
- }catch(e){say('Sign-in failed. Please try again.')}finally{button.disabled=false}
+  const email=$('email').value.trim(),pw=$('password').value;
+  if(boMode==='create'){
+   say('Creating your account...');
+   const {data:suData,error:suErr}=await sb.auth.signUp({email:email,password:pw,options:{data:{colors:{p:boColors.p,s:boColors.s}}}});
+   $('password').value='';
+   if(suErr){say(/already|registered|exists/i.test(suErr.message)?'That email already has a login - use the Sign in link below.':('Could not create account: '+suErr.message));return}
+   if(!suData.session){
+    if(suData.user&&suData.user.identities&&suData.user.identities.length===0){say('That email already has a login - use the Sign in link below.');return}
+    boSetMode('signin');say('Account created. One more step: confirm your email, then sign in below.');return}
+   try{const {error:rpcErr}=await sb.rpc('breakerops_provision');if(rpcErr){say('Account created, but workspace setup failed: '+rpcErr.message);return}}catch(re){say('Account created, but workspace setup failed. Try signing in again.');return}
+   await refresh();
+  }else{
+   say('Signing in...');
+   const {data:siData,error}=await sb.auth.signInWithPassword({email:email,password:pw});
+   $('password').value='';
+   if(error){say('Sign-in failed. Check your email and password.');return}
+   try{var um=(siData&&siData.user&&siData.user.user_metadata)||{};
+   if(boTouched||!um.colors){var merged={};for(var k in um)merged[k]=um[k];merged.colors={p:boColors.p,s:boColors.s};await sb.auth.updateUser({data:merged})}}catch(e){}
+   try{await sb.rpc('breakerops_provision')}catch(re){}
+   await refresh();
+  }
+ }catch(e){say(boMode==='create'?'Could not create account. Please try again.':'Sign-in failed. Please try again.')}finally{button.disabled=false}
 };
 $('enable').onclick=async()=>{
  $('enable').disabled=true;
