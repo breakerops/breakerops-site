@@ -145,7 +145,7 @@ input,select{width:100%;font:inherit;padding:12px;border:1px solid var(--border)
 </style></head>
 <body><div class="bar-top"></div><div class="bar-bottom"></div><div class="app">
 <header><div class="wrap page-tools">
-<button class="gear" id="gear" type="button" aria-label="Settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg></button>
+<button class="gear" id="gear" type="button" aria-label="Account and settings"><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><circle cx="12" cy="8.5" r="3.5"/><path d="M5.5 19.5c1-3.5 3.5-5 6.5-5s5.5 1.5 6.5 5"/></svg></button>
 <a class="backpill" id="backpill" href="#" hidden>&lsaquo; Home</a>
 <div class="tools-spacer"></div>
 <div class="textus-wrap"><button class="textus" id="textus-btn" type="button"><img class="textus-ava" src="../icons/matt.jpg" alt="">Text Matt <span aria-hidden="true">&#8599;</span></button><div class="textus-pop" id="textus-pop" hidden></div></div>
@@ -204,8 +204,8 @@ function rowHtml(v){return '<button type="button" class="t-row" data-item="'+esc
 function todayAll(){var l=on(key(new Date()));return l.filter(function(v){return !v.due_time;}).concat(l.filter(function(v){return v.due_time;}));}
 function renderHome(){
  var t=new Date();
- var acct=esc(bizName||'\u2026')+(user?' &middot; '+esc((user.user_metadata&&user.user_metadata.full_name)||user.email||''):'');
- var h='<h1 class="home-title">Your shop</h1><p class="home-date">'+t.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</p><p class="home-acct">'+acct+'</p>';
+ var acct=user?esc((user.user_metadata&&user.user_metadata.full_name)||user.email||''):'';
+ var h='<h1 class="home-title">'+esc(bizName||'Your shop')+'</h1><p class="home-date">'+t.toLocaleDateString('en-US',{weekday:'short',month:'short',day:'numeric'})+'</p>'+(acct?'<p class="home-acct">'+acct+'</p>':'');
  h+='<p class="choose">Choose an area.</p><div class="tiles">'+['sales','operations','accounting'].map(function(a){var A=AREAS[a];return '<button type="button" class="tile" data-go="area/'+a+'">'+A.glyph+'<span class="t-label">'+A.label+'</span></button>';}).join('')+'</div>';
  var all=todayAll();
  h+='<section class="card"><div class="tc-head"><h2>Today</h2><a href="#week">View week &rsaquo;</a></div><p class="tc-date">'+t.toLocaleDateString('en-US',{weekday:'long',month:'long',day:'numeric'})+'</p>';
