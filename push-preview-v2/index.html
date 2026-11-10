@@ -75,6 +75,7 @@ button[type=submit]{background:var(--accent);color:#fff}
 .alert-x{background:none;border:0;color:#83301f;font-size:18px;line-height:1.2;cursor:pointer;padding:0 2px;margin:0;box-shadow:none;min-height:0;width:auto}
 .alert-link{background:none;border:0;color:#83301f;font-size:13px;font-weight:700;text-decoration:underline;cursor:pointer;padding:2px 0;margin:0;box-shadow:none;min-height:0;width:auto;white-space:nowrap}
 a.disabled{opacity:.5;pointer-events:none}
+#auth-forgot{display:block;margin-top:2px}
 button.auth-alt{display:inline-block;width:auto;background:none;color:#485661;font-size:13px;font-weight:600;text-decoration:underline;padding:2px 0 4px;margin:0;box-shadow:none;min-height:0;border-radius:0}
 .confirm-email{text-align:center;padding:6px 0}
 .ce-title{font-size:19px;font-weight:800;margin:0 0 12px;color:#1e2c36}
@@ -115,6 +116,7 @@ button.ce-alt{background:none;border:0;color:#485661;font-size:13px;font-weight:
 <div class="alert" id="auth-alert" role="alert" hidden><span id="auth-alert-msg"></span><button type="button" class="alert-link" id="auth-alert-action" hidden>Sign in instead</button><button type="button" class="alert-x" id="auth-alert-x" aria-label="Dismiss message">&times;</button></div>
 <button type="submit" id="auth-go">Create account</button>
 <button type="button" class="auth-alt" id="auth-alt">Already have a login? Sign in</button>
+<button type="button" class="auth-alt" id="auth-forgot" hidden>Forgot password?</button>
 </form>
 <section class="confirm-email" id="confirm-email" hidden>
 <h3 class="ce-title">Check your email to confirm</h3>
@@ -122,6 +124,11 @@ button.ce-alt{background:none;border:0;color:#485661;font-size:13px;font-weight:
 <p class="ce-line">Tap the link in that email to confirm your account. Then come back to the BreakerOps icon on your Home Screen and sign in.</p>
 <button type="button" class="ce-go" id="ce-signin">I've confirmed, sign in</button>
 <div class="ce-row"><button type="button" class="ce-alt" id="ce-resend">Resend email</button><button type="button" class="ce-alt" id="ce-startover">Wrong email? Start over</button></div>
+</section>
+<section class="confirm-email" id="reset-pw" hidden>
+<label for="rp-password">New password</label><input id="rp-password" type="password" autocomplete="new-password" minlength="6" required>
+<label for="rp-password2">Repeat new password</label><input id="rp-password2" type="password" autocomplete="new-password" minlength="6" required>
+<button type="button" class="ce-go" id="rp-save">Save new password</button>
 </section>
 <div class="status" id="status" role="status"></div>
 <div class="note">Preview only. Your current reminders are unchanged.</div>
@@ -131,6 +138,9 @@ button.ce-alt{background:none;border:0;color:#485661;font-size:13px;font-weight:
 const SUPA_URL='https://euchkgnqxycqzgamucry.supabase.co';
 const ANON='sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne';
 const VAPID_PUB='BNquoQu1tKe8OBfFAKSVHCZd0G5ySodsRJHdmvAAbPHITvkLBlWKnkAQ54oxgTPQuPRX4uP0fTO_xyQTkERUarI';
+const boHash=(()=>{try{return new URLSearchParams(location.hash.slice(1))}catch(_){return new URLSearchParams()}})();
+let boRecovery=boHash.get('type')==='recovery';
+const boAuthErr=boHash.get('error');
 const sb=supabase.createClient(SUPA_URL,ANON);
 const $=id=>document.getElementById(id);
 function u8(s){const p='='.repeat((4-s.length%4)%4);const b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
@@ -159,12 +169,20 @@ function step(n,title,copy){
   $('step-title').textContent=title;
  }
  $('step-copy').textContent=copy;
- for(const id of ['setup','signin','enable','test','confirmed','retry','confirm-email']) $(id).hidden=true;
+ for(const id of ['setup','signin','enable','test','confirmed','retry','confirm-email','reset-pw']) $(id).hidden=true;
  $('install-steps').hidden=true;
  $('setup').setAttribute('aria-expanded','false');
  say('');
 }
+function boShowReset(){step(null,'Set a new password','Pick a new password for your BreakerOps login.');$('reset-pw').hidden=false}
 async function refresh(){
+ if(boAuthErr){
+  history.replaceState(null,'',location.pathname);
+  boSetMode('signin');
+  boAlert('That reset link has expired. Tap Forgot password to get a new one.');return;
+ }
+ if(boRecovery){boShowReset();return}
+
  if(!isInstalled()){
   step(1,'Add to your Home Screen','One iPhone step first. Use the browser menu to add this page, then open the new BreakerOps icon. The next step appears there.');
   $('setup').hidden=false;
@@ -237,10 +255,12 @@ function boSetMode(m,copy,inSetup){
   $('auth-go').textContent='Create account';
   $('auth-alt').textContent='Already have a login? Sign in';
   $('auth-alt').hidden=false;
+  $('auth-forgot').hidden=true;
  }else{
   if(inSetup){
    step(2,'Sign in',copy||'Your email is confirmed. Sign in to continue.');
    $('auth-alt').hidden=true;
+   $('auth-forgot').hidden=false;
   }else{
    step(null,'Sign in',copy||'Welcome back. Sign in with your BreakerOps login. Home Screen apps may ask you to sign in separately from Safari.');
    $('auth-alt').textContent='New here? Create an account';
@@ -248,6 +268,7 @@ function boSetMode(m,copy,inSetup){
   }
   $('password').setAttribute('autocomplete','current-password');
   $('auth-go').textContent='Sign in';
+  if(inSetup!==true)$('auth-forgot').hidden=false;
  }
  $('signin').hidden=false;
 }
@@ -260,6 +281,31 @@ function boShowConfirm(email){
 $('ce-signin').onclick=()=>{boSetMode('signin',null,true);$('email').value=$('ce-email').textContent};
 $('ce-resend').onclick=async()=>{const b=$('ce-resend');b.disabled=true;try{const r=await sb.auth.resend({type:'signup',email:$('ce-email').textContent});say(r&&r.error?('Could not resend: '+r.error.message):'Sent again. Check your inbox.')}catch(e){say('Could not resend. Try again in a moment.')}finally{b.disabled=false}};
 $('ce-startover').onclick=()=>{boSetMode('create')};
+sb.auth.onAuthStateChange(ev=>{if(ev==='PASSWORD_RECOVERY'){boRecovery=true;boShowReset()}});
+$('auth-forgot').onclick=async()=>{
+ const email=$('email').value.trim();
+ if(!email){boAlert('Enter your email first, then tap Forgot password.');$('email').focus();return}
+ const b=$('auth-forgot');b.disabled=true;boAlertClear();
+ try{
+  const {error}=await sb.auth.resetPasswordForEmail(email,{redirectTo:location.origin+location.pathname});
+  say(error?('Could not send the reset email. Try again in a moment.'):'If that email has a login, a reset link is on its way. Check your inbox.');
+ }catch(e){say('Could not send the reset email. Try again in a moment.')}
+ finally{b.disabled=false}
+};
+$('rp-save').onclick=async()=>{
+ const b=$('rp-save');b.disabled=true;boAlertClear();
+ try{
+  const pw=$('rp-password').value;
+  if(pw!==$('rp-password2').value){boAlert('The two passwords don\u2019t match. Try again.');$('rp-password2').focus();return}
+  const {error}=await sb.auth.updateUser({password:pw});
+  if(error){boAlert(error.message+(/\.$/.test(error.message)?'':'.'));$('rp-password').focus();return}
+  try{await sb.auth.signOut()}catch(_){ }
+  boRecovery=false;
+  history.replaceState(null,'',location.pathname);
+  boSetMode('signin','Password updated. Open the BreakerOps icon on your Home Screen and sign in with your new password.');
+ }catch(e){boAlert('Could not update the password. Try the reset link again.')}
+ finally{b.disabled=false}
+};
 $('signin').onsubmit=async(e)=>{
  e.preventDefault();
  boAlertClear();
