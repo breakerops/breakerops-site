@@ -20,7 +20,7 @@ Deno.serve(async (req) => {
   try { payload = await req.json(); } catch { return reply({ error: "invalid request" }, 400); }
   const { endpoint, p256dh, auth, user_agent } = payload || {};
   if (typeof endpoint !== "string" || typeof p256dh !== "string" || typeof auth !== "string" ||
-      !p256dh || !auth || p256dh.length > 512 || auth.length > 512) {
+      !endpoint || endpoint.length > 2048 || !p256dh || !auth || p256dh.length > 512 || auth.length > 512) {
     return reply({ error: "invalid request" }, 400);
   }
   try {
