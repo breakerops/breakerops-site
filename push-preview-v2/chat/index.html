@@ -3,21 +3,25 @@
 <title>BreakerOps | Matt</title><meta name="apple-mobile-web-app-title" content="BreakerOps"><meta name="robots" content="noindex,nofollow">
 <meta name="theme-color" content="#648ea9"><meta name="theme-color" media="(prefers-color-scheme: light)" content="#648ea9"><meta name="theme-color" media="(prefers-color-scheme: dark)" content="#22333c">
 <link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<script>
+(function(){var pref='auto';try{pref=localStorage.getItem('breakerops.appearance')||'auto';}catch(e){}var mq=matchMedia('(prefers-color-scheme: dark)');function apply(){var dark=pref==='dark'||(pref==='auto'&&mq.matches);document.documentElement.dataset.theme=dark?'dark':'light';document.documentElement.style.colorScheme=dark?'dark':'light';document.querySelectorAll('meta[name="theme-color"]').forEach(function(m){m.content=dark?'#14252e':'#648ea9';});}apply();mq.addEventListener('change',apply);})();
+</script>
 <style>
 :root{--fg:#1e2c36;--muted:#485661;--border:rgba(20,45,62,.13);--card:rgba(255,255,255,.66);--accent:#246779;--accent-ink:#ffffff;--bad:#a63d22}
 html[data-theme=dark]{--fg:#e9eef0;--muted:#93a4ad;--border:rgba(233,238,240,.15);--card:rgba(30,44,52,.72);--accent:#7cc3d4;--accent-ink:#14252e;--bad:#ff9d8a}
 @media (prefers-color-scheme: dark){html:not([data-theme=light]){--fg:#e9eef0;--muted:#93a4ad;--border:rgba(233,238,240,.15);--card:rgba(30,44,52,.72);--accent:#7cc3d4;--accent-ink:#14252e;--bad:#ff9d8a}}
 html[data-theme=dark] .greeting,html[data-theme=dark] .hint{color:#e9eef0}
 *{box-sizing:border-box;margin:0;padding:0}
-html,body{height:100%}
+html{height:100%;background:#648ea9}html[data-theme=dark]{background:#14252e}
+html,body{min-height:0}body{height:100vh;height:100dvh;overflow:hidden}
 body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif;color:var(--fg);background:linear-gradient(168deg,#648ea9 0%,#b7cdd6 48%,#e6d9c7 100%) fixed;display:flex;flex-direction:column}
 html[data-theme=dark] body{background:linear-gradient(168deg,#14252e 0%,#1c3038 48%,#29291f 100%) fixed}
 @media (prefers-color-scheme: dark){html:not([data-theme=light]) body{background:linear-gradient(168deg,#14252e 0%,#1c3038 48%,#29291f 100%) fixed}}
-header{display:flex;align-items:center;gap:12px;padding:calc(14px + env(safe-area-inset-top,0px)) 18px 14px;color:#fff}
+header{flex-shrink:0;position:relative;z-index:4;background:var(--shell-top,#648ea9);display:flex;align-items:center;gap:12px;padding:calc(14px + env(safe-area-inset-top,0px)) 18px 14px;color:#fff}
 header .back{color:#fff;text-decoration:none;font-size:17px;font-weight:600;opacity:.92}
 header .ava{width:46px;height:46px;border-radius:50%;object-fit:cover;background:#fff}
 header h1{font-size:21px;font-weight:700}
-main{flex:1;overflow-y:auto;padding:10px 20px 18px;display:flex;flex-direction:column}
+main{flex:1;min-height:0;overflow-y:auto;overscroll-behavior:contain;padding:10px 20px 18px;display:flex;flex-direction:column}
 .wrap{position:relative;flex:1;display:flex;flex-direction:column}
 /* conversation: no bubbles, text on the gradient */
 .thread{display:flex;flex-direction:column;gap:14px;padding:6px 4px}
@@ -33,10 +37,10 @@ html[data-theme=dark] .line.out{color:#aab9c1}
 .center-stage img{width:88px;height:88px;border-radius:50%;object-fit:cover;background:#fff;box-shadow:0 8px 30px rgba(20,45,62,.18)}
 .greeting{font-size:26px;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(20,45,62,.12);line-height:1.3;max-width:16ch}
 .hint{position:absolute;left:0;right:0;bottom:calc(20px + env(safe-area-inset-bottom,0px));text-align:center;color:#fff;opacity:.85;font-size:15px;pointer-events:none}
-body.typing .hint,body.typing .center-stage{display:none}
+body.typing .hint,body.typing .center-stage{opacity:0;pointer-events:none}
 /* typing: big text above the keyboard */
-.typing-stage{display:none;position:fixed;left:0;right:0;bottom:0;z-index:3;padding:10px 24px calc(16px + env(safe-area-inset-bottom,0px));flex-direction:column;align-items:center;gap:16px;text-align:center}
-.typing-stage.on{display:flex}
+.typing-stage{display:flex;visibility:hidden;opacity:0;transform:translateY(10px);transition:opacity .16s ease,transform .16s ease,visibility .16s;position:fixed;left:0;right:0;bottom:0;z-index:3;padding:10px 24px calc(16px + env(safe-area-inset-bottom,0px));flex-direction:column;align-items:center;gap:16px;text-align:center}
+.typing-stage.on{visibility:visible;opacity:1;transform:translateY(0)}
 .typing-stage img{width:52px;height:52px;border-radius:50%;object-fit:cover;background:#fff}
 .typed{font-size:25px;line-height:1.45;color:var(--fg);font-weight:500;max-width:30ch;min-height:1.45em;max-height:38vh;overflow-y:auto;word-break:break-word}
 .typed .ph{color:var(--muted);font-weight:400}
@@ -44,16 +48,26 @@ body.typing .hint,body.typing .center-stage{display:none}
 @keyframes blink{50%{opacity:0}}
 /* the real input the keyboard attaches to; visually hidden */
 #msg{position:fixed;left:0;bottom:0;width:100%;height:44px;opacity:0;border:none;font-size:17px;pointer-events:none}
+
+html[data-theme=dark]{--shell-top:#14252e}
+header h1{flex:1}
+#send{border:0;border-radius:20px;padding:10px 15px;font-family:inherit;font-weight:600;font-size:16px;background:var(--accent);color:var(--accent-ink);opacity:0;visibility:hidden;transition:opacity .16s;min-height:44px}
+body.typing #send{opacity:1;visibility:visible}body.typing #send:disabled{opacity:.45}
+#connection{flex-shrink:0;text-align:center;padding:5px 18px;font-size:13px;color:var(--fg);min-height:26px}
+#connection:empty{min-height:0;padding:0}#retryLoad{align-self:center;padding:8px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--fg)}
+#sendError{position:relative;z-index:5;padding:10px 18px;background:var(--bad);color:white;font-size:14px}
+.hint,.center-stage{transition:opacity .16s}.typing-stage{pointer-events:none}.typed{pointer-events:auto}.line.new{animation:arrive .18s ease-out}
+@keyframes arrive{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style></head>
 <body>
 <header>
 <a class="back" href="/push-preview-v2/calendar/">&lsaquo; Home</a>
 <img class="ava" src="../icons/matt.jpg" alt="">
-<h1>Matt</h1>
+<h1>Matt</h1><button id="send" type="button" disabled aria-label="Send message">Send</button>
 </header>
-<main id="thread"></main>
+<div id="connection" role="status" aria-live="polite">Connecting...</div><button id="retryLoad" type="button" hidden>Try again</button><main id="thread" aria-label="Conversation with Matt"></main><p id="sendError" role="alert" hidden></p>
 <div class="typing-stage" id="typingStage">
-<img src="../icons/matt.jpg" alt="">
 <div class="typed" id="typed" aria-live="polite"></div>
 </div>
 <input id="msg" type="text" autocomplete="off" maxlength="4000" enterkeyhint="send" aria-label="Message Matt">
@@ -61,103 +75,87 @@ body.typing .hint,body.typing .center-stage{display:none}
 <script>
 var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
 var thread=document.getElementById('thread'),msg=document.getElementById('msg'),typingStage=document.getElementById('typingStage'),typed=document.getElementById('typed');
-var session=null,businessId=null,lastSeen='',hasMessages=false,draft='',typing=false,sending=false;
+var session=null,businessId=null,hasMessages=false,typing=false,sending=false,channel=null,loading=false,reloadWanted=false,firstLoad=true,lastRender='',connected=false;
+var sendButton=document.getElementById('send'),connection=document.getElementById('connection'),retryLoad=document.getElementById('retryLoad'),sendError=document.getElementById('sendError');
 function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
 function fmtWhen(iso){var d=new Date(iso);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
+function status(text,retry){connection.textContent=text;retryLoad.hidden=!retry;}
 function render(rows){
+ var signature=JSON.stringify(rows);if(signature===lastRender)return;lastRender=signature;
+ var nearBottom=thread.scrollHeight-thread.scrollTop-thread.clientHeight<90,oldTop=thread.scrollTop;
  hasMessages=rows.length>0;
- if(!rows.length){
-  thread.innerHTML='<div class="wrap"><div class="center-stage"><img src="../icons/matt.jpg" alt=""><div class="greeting">What can Matt help with?</div></div><div class="hint">Tap anywhere to type</div></div>';
-  return;
- }
- var html='<div class="wrap"><div class="thread">',prev=0;
- rows.forEach(function(r){
-  var t=new Date(r.created_at).getTime();
-  if(!prev||t-prev>5*60*1000){html+='<div class="stamp">'+esc(fmtWhen(r.created_at))+'</div>';}
-  html+='<div class="line '+esc(r.direction)+'">'+esc(r.body)+'</div>';
-  prev=t;
- });
- html+='</div><div class="hint">Tap anywhere to type</div></div>';
- thread.innerHTML=html;
- thread.scrollTop=thread.scrollHeight;
+ if(!rows.length){thread.innerHTML='<div class="wrap"><div class="center-stage"><img src="../icons/matt.jpg" alt=""><div class="greeting">What can Matt help with?</div></div><div class="hint">Tap anywhere to type</div></div>';firstLoad=false;return;}
+ var wrap=thread.querySelector('.wrap'),list=thread.querySelector('.thread');
+ if(!list){thread.innerHTML='<div class="wrap"><div class="thread"></div><div class="hint">Tap anywhere to type</div></div>';wrap=thread.querySelector('.wrap');list=thread.querySelector('.thread');}
+ var existing={};list.querySelectorAll('[data-message]').forEach(function(n){existing[n.dataset.message]=n;});
+ var keep={},prev=0,cursor=list.firstElementChild;rows.forEach(function(r){
+  var t=new Date(r.created_at).getTime(),stamp=!prev||t-prev>5*60*1000;prev=t;
+  var item=existing[r.id],isNew=!item;if(!item){item=document.createElement('div');item.dataset.message=r.id;item.style.display='contents';}
+  var html=(stamp?'<div class="stamp">'+esc(fmtWhen(r.created_at))+'</div>':'')+'<div class="line '+(r.direction==='out'?'out':'in')+'">'+esc(r.body)+'</div>';
+  if(item.innerHTML!==html)item.innerHTML=html;
+  if(isNew){var line=item.querySelector('.line');line.classList.add('new');line.addEventListener('animationend',function(){this.classList.remove('new');},{once:true});}
+  if(item!==cursor)list.insertBefore(item,cursor);
+  cursor=item.nextElementSibling;keep[r.id]=true;
+ });Object.keys(existing).forEach(function(id){if(!keep[id])existing[id].remove();});
+ if(firstLoad||nearBottom)thread.scrollTop=thread.scrollHeight;else thread.scrollTop=oldTop;firstLoad=false;
 }
 async function load(){
- var q=await sb.from('messages').select('id,direction,body,created_at').eq('business_id',businessId).order('created_at',{ascending:true}).limit(200);
- if(q.error)return;
- var rows=q.data||[];
- if(rows.length)lastSeen=rows[rows.length-1].created_at;
- render(rows);
+ if(!businessId)return;if(loading){reloadWanted=true;return;}loading=true;
+ try{
+  var q=await sb.from('messages').select('id,direction,body,created_at').eq('business_id',businessId).order('created_at',{ascending:false}).order('id',{ascending:false}).limit(200);
+  if(q.error)throw q.error;render((q.data||[]).slice().reverse());
+  status(connected?'':'Connecting to live messages...',!connected);
+ }catch(e){status('Could not load messages. Your draft is still here.',true);}
+ finally{loading=false;if(reloadWanted){reloadWanted=false;load();}}
 }
 function paintTyped(){
- var v=msg.value;
- typed.innerHTML=(v?esc(v):'<span class="ph">Type your message</span>')+'<span class="caret"></span>';
+ var v=msg.value;typed.innerHTML=esc(v)+'<span class="caret" aria-hidden="true"></span>';
+ sendButton.disabled=!v.trim()||sending;
 }
-function startTyping(){
- if(typing||!session||!businessId)return;
- typing=true;
- typingStage.classList.add('on');
- document.body.classList.add('typing');
- paintTyped();
- msg.focus();
-}
-function stopTyping(){
- typing=false;
- typingStage.classList.remove('on');
- document.body.classList.remove('typing');
- msg.blur();
-}
+function startTyping(){if(typing||!session||!businessId)return;typing=true;typingStage.classList.add('on');document.body.classList.add('typing');paintTyped();msg.focus();}
+function stopTyping(){typing=false;typingStage.classList.remove('on');document.body.classList.remove('typing');msg.blur();}
 var blurAt=0;
 document.addEventListener('click',function(e){
- if(e.target.closest('header'))return;
+ if(e.target.closest('header,button,a,#sendError'))return;
  if(e.target.closest('.typing-stage')||e.target===msg)return;
- if(typing){stopTyping();return;}
- if(Date.now()-blurAt<350)return; // the tap that dismissed the keyboard
- startTyping();
+ if(typing){stopTyping();return;}if(Date.now()-blurAt<350)return;startTyping();
 });
 msg.addEventListener('input',paintTyped);
 msg.addEventListener('blur',function(){if(!sending){stopTyping();blurAt=Date.now();}});
-msg.addEventListener('keydown',async function(e){
- if(e.key==='Escape'){stopTyping();return;}
- if(e.key!=='Enter')return;
- if(e.isComposing||e.keyCode===229)return; // let IME composition finish first
- e.preventDefault();
- var body=msg.value.trim();
- if(!body||sending)return;
- sending=true;
+// Keep the input focused until the visible send button's click is handled.
+sendButton.addEventListener('pointerdown',function(e){e.preventDefault();});
+sendButton.addEventListener('click',sendMessage);
+async function sendMessage(){
+ var body=msg.value.trim();if(!body||sending)return;sending=true;paintTyped();sendError.hidden=true;sendButton.textContent='Sending...';
  try{
-  var fresh=await sb.auth.getSession();
-  if(fresh.data.session)session=fresh.data.session;
+  var fresh=await sb.auth.getSession();if(fresh.error||!fresh.data.session)throw new Error('session');session=fresh.data.session;
   var r=await fetch('https://euchkgnqxycqzgamucry.supabase.co/functions/v1/chat-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':'sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne','Authorization':'Bearer '+session.access_token},body:JSON.stringify({business_id:businessId,body:body})});
-  if(!r.ok)throw new Error('send failed');
-  msg.value='';draft='';
-  stopTyping();
-  await load();
- }catch(_){
-  var err=document.createElement('div');err.className='err';err.textContent='Could not send. Try again in a moment.';
-  thread.appendChild(err);setTimeout(function(){err.remove();},4000);
- }finally{sending=false;}
-});
-// Keep the typing stage parked just above the iOS keyboard.
-if(window.visualViewport){
- var park=function(){
-  var gap=window.innerHeight-window.visualViewport.height-window.visualViewport.offsetTop;
-  typingStage.style.bottom=Math.max(0,gap)+'px';
- };
- window.visualViewport.addEventListener('resize',park);
- window.visualViewport.addEventListener('scroll',park);
- park();
+  if(!r.ok)throw new Error('send failed');msg.value='';stopTyping();await load();
+ }catch(e){sendError.textContent=e.message==='session'?'Your session expired. Your draft is kept. Sign in again from Home.':'Could not confirm the send. Your draft is kept. Check the thread before trying again.';sendError.hidden=false;}
+ finally{sending=false;sendButton.textContent='Send';paintTyped();}
 }
-sb.auth.getSession().then(async function(r){
- session=r.data.session;
- if(!session){location.replace('/push-preview-v2/');return;}
- var b=await sb.from('businesses').select('id').limit(1);
- businessId=b.data&&b.data[0]&&b.data[0].id;
- await load();
- // Instant delivery for new messages; slow poll as fallback.
- try{
-  sb.channel('messages-'+businessId).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'business_id=eq.'+businessId},function(){load();}).subscribe();
- }catch(_){}
- setInterval(function(){if(!document.hidden)load();},60000);
-});
+msg.addEventListener('keydown',function(e){if(e.key==='Escape'){stopTyping();return;}if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendMessage();}});
+if(window.visualViewport){var park=function(){var v=window.visualViewport,gap=window.innerHeight-v.height-v.offsetTop;typingStage.style.bottom=Math.max(0,gap)+'px';typingStage.style.maxHeight=Math.max(80,v.height-140)+'px';};window.visualViewport.addEventListener('resize',park);window.visualViewport.addEventListener('scroll',park);park();}
+function subscribe(){
+ if(!businessId||!navigator.onLine)return;
+ if(channel){var old=channel;channel=null;sb.removeChannel(old);}connected=false;status('Connecting to live messages...',false);
+ var next=sb.channel('messages-'+businessId);channel=next;next.on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'business_id=eq.'+businessId},function(){load();}).subscribe(function(state){
+  if(channel!==next)return;
+  if(state==='SUBSCRIBED'){connected=true;status('',false);load();}
+  else if(state==='CHANNEL_ERROR'||state==='TIMED_OUT'||state==='CLOSED'){connected=false;status('Live connection lost. Tap Try again to reconnect.',true);}
+ });
+}
+async function init(){
+ status('Loading conversation...',false);
+ try{var r=await sb.auth.getSession();if(r.error)throw r.error;session=r.data.session;if(!session){location.replace('/push-preview-v2/');return;}
+ var b=await sb.from('businesses').select('id').limit(1);if(b.error||!b.data||!b.data.length)throw new Error('workspace');businessId=b.data[0].id;await load();subscribe();}
+ catch(e){status('Could not open your conversation. Try again, or sign in from Home.',true);}
+}
+retryLoad.addEventListener('click',function(){if(!businessId)init();else{load();subscribe();}});
+window.addEventListener('offline',function(){connected=false;status('You are offline. Your draft is kept.',false);});
+window.addEventListener('online',function(){if(businessId){load();subscribe();}else init();});
+document.addEventListener('visibilitychange',function(){if(!document.hidden&&businessId){load();if(!connected)subscribe();}});
+window.addEventListener('pageshow',function(e){if(e.persisted&&businessId){load();subscribe();}});
+init();
 </script>
 </body></html>
