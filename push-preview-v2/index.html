@@ -96,12 +96,12 @@ button.ce-alt{background:none;border:0;color:#485661;font-size:13px;font-weight:
 <p id="step-copy"></p>
 <button class="setup" id="setup" hidden aria-expanded="false" aria-controls="install-steps">Show me where to tap</button>
 <section class="steps" id="install-steps" hidden aria-label="Home Screen setup">
-<h2>Add Calendar to your Home Screen</h2>
+<h2>Add BreakerOps to your Home Screen</h2>
 <ol>
 <li>In Safari, tap the menu <svg class="menu-icon" viewBox="0 0 24 24" aria-label="browser menu symbol"><rect x="7.5" y="2.5" width="9" height="7.5" rx="1.8"/><rect x="16.5" y="5" width="2.6" height="2.6" rx="1"/><line x1="4.5" y1="14" x2="19.5" y2="14"/><line x1="4.5" y1="18.5" x2="19.5" y2="18.5"/></svg> beside <strong>breakerops.com</strong> in the address bar, then <strong>Share</strong> <svg class="share-icon" viewBox="0 0 24 28" aria-label="square with upward arrow"><path d="M5 12H2v14h20V12h-3M12 19V2M6 8l6-6 6 6"/></svg>. If you already see the Share symbol in your toolbar, tap it directly.</li>
 <li>Scroll down the Share menu and tap <strong>Add to Home Screen</strong>. If missing, look under <strong>Edit Actions</strong>.</li>
 <li>If shown, leave <strong>Open as Web App</strong> on, then tap <strong>Add</strong>.</li>
-<li>Open the new <strong>Calendar</strong> icon from your Home Screen. Sign in there, then tap <strong>Enable notifications</strong>.</li>
+<li>Open the new <strong>BreakerOps</strong> icon from your Home Screen. Sign in there, then tap <strong>Enable notifications</strong>.</li>
 </ol>
 <p>This button shows the steps. iPhone requires the actual Home Screen action in the browser menu. If you are inside another app's browser, open this page in Safari first.</p>
 </section>
@@ -200,7 +200,7 @@ function readyForTest(){
  step(null,'Send a test alert','Send one clearly labeled test alert. Your iPhone decides when to show it. Then tap I saw it below to open your calendar.');
  $('test').hidden=false;
  $('confirmed').hidden=false;
- $('confirmed').classList.add('disabled');$('confirmed').setAttribute('aria-disabled','true');
+ $('confirmed').classList.add('disabled');$('confirmed').setAttribute('aria-disabled','true');$('confirmed').removeAttribute('href');
 }
 $('setup').onclick=()=>{
  const open=$('install-steps').hidden;
@@ -311,6 +311,7 @@ $('enable').onclick=async()=>{
  }catch(e){say('Could not save notification permission: '+e.message);$('retry').hidden=false}
  finally{$('enable').disabled=false}
 };
+$('confirmed').addEventListener('click',e=>{if($('confirmed').classList.contains('disabled'))e.preventDefault()});
 $('test').onclick=async()=>{
  $('test').disabled=true; say('Sending your test...');
  try{
@@ -323,7 +324,7 @@ $('test').onclick=async()=>{
    say('The push service accepted the test for '+j.sent+' device(s). Delivery is not confirmed yet. Check your Lock Screen or Notification Center.');
    $('step-title').textContent='You\u2019re all set';
    $('step-copy').textContent='Watch for the test alert. Tap the banner to open your calendar.';
-   $('confirmed').classList.remove('disabled');$('confirmed').removeAttribute('aria-disabled');
+   $('confirmed').href='/push-preview-v2/calendar/';$('confirmed').classList.remove('disabled');$('confirmed').removeAttribute('aria-disabled');
    $('confirmed').hidden=false;
   }else{say('No test was accepted. '+j.failed+' device(s) failed. Try Check again to review permission.');$('retry').hidden=false}
  }catch(e){say('Test failed: '+e.message);$('retry').hidden=false}
