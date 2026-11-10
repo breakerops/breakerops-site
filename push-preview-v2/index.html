@@ -303,7 +303,7 @@ $('test').onclick=async()=>{
  try{
   const current=await sb.auth.getSession();session=current.data.session;
   if(!session){await refresh();return}
-  const r=await fetch(SUPA_URL+'/functions/v1/push-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({user_id:user.id})});
+  const r=await fetch(SUPA_URL+'/functions/v1/push-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({user_id:user.id,url:'https://www.breakerops.com/push-preview-v2/calendar/'})});
   const j=await r.json();
   if(!r.ok) throw new Error(j.error||String(r.status));
   if(j.sent>0){
