@@ -274,6 +274,7 @@ $('signin').onsubmit=async(e)=>{
    if(suErr){
     if(/already|registered|exists/i.test(suErr.message)){fail('That email already has a login.');$('auth-alert-action').hidden=false}
     else if(/password/i.test(suErr.message))fail(suErr.message+(/\.$/.test(suErr.message)?'':'.'));
+    else if(/signups? not allowed|signups? (are |is )?(disabled|off)/i.test(suErr.message))fail("Signups are by invitation right now. Text us and we'll set you up.");
     else fail('Could not create account: '+suErr.message);
     return}
    if(!suData.session){
