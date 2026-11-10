@@ -195,7 +195,7 @@ function on(k){return items.filter(function(x){return x.due_date===k;}).sort(fun
 function displayNotes(value){var joins=[];var text=String(value||'').replace(/^\s*Ends:\s*(\d{4}-\d{2}-\d{2}T[^\s]+)\s*$/gmi,function(_,stamp){var d=new Date(stamp);return isNaN(d)?'':'Ends '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}).replace(/^\s*Ends:\s*(\d{4}-\d{2}-\d{2})\s*$/gmi,function(_,stamp){var d=new Date(stamp+'T12:00:00');return isNaN(d)?'':'Through '+d.toLocaleDateString('en-US',{month:'short',day:'numeric',year:'numeric'});}).replace(/^\s*Source:.*$/gmi,'').replace(/https?:\/\/[^\s<>]+/gi,function(url){if(/^https:\/\/meet\.google\.com\//i.test(url)){joins.push(url);return '';}if(/(?:google\.com\/calendar|calendar\.google\.com)/i.test(url))return '';return url;}).replace(/\bJoin:\s*(?=\n|$)/gmi,'').trim();return esc(text).replace(/\n/g,'<br>')+joins.map(function(url){return '<br><a href="'+esc(url)+'" target="_blank" rel="noopener noreferrer">Join</a>';}).join('');}
 function fmtTime(t){if(!t)return '';var p=String(t).split(':');var h=+p[0];return ((h%12)||12)+':'+p[1]+' '+(h<12?'AM':'PM');}
 function completionMark(x){return x.completed?'<span class="completion-indicator" aria-label="Completed"><svg class="drawn-check" viewBox="0 0 16 16" aria-hidden="true"><path d="m3 8 3 3 7-7"/></svg></span>':'<span class="completion-space" aria-hidden="true"></span>';}
-function textUs(){return 'Text us at '+CUSTOMER_TEXT_NUMBER+' <span class="fine">(number coming soon)</span>';}
+
 var AREAS={
  sales:{label:'Sales',sub:'From quote to booked work',glyph:'<svg class="icon glyph" viewBox="5 0 24 32" aria-hidden="true"><defs><linearGradient id="g-sales" x1="0" y1="0" x2=".4" y2="1"><stop stop-color="#b49bec"/><stop offset="1" stop-color="#7358bd"/></linearGradient></defs><path d="M7 2h14l6 6v22H7z" fill="url(#g-sales)"/><path d="M21 2v7h6" fill="#d9cbff"/><path d="M11 14h11m-11 5h11m-11 5h7" stroke="#fff" stroke-width="2" stroke-linecap="round"/></svg>'},
  operations:{label:'Operations',sub:'Jobs, access and materials',glyph:'<svg class="icon glyph" viewBox="2 2 28 29" aria-hidden="true"><defs><linearGradient id="g-operations" x1="0" y1="0" x2=".4" y2="1"><stop stop-color="#75bdff"/><stop offset="1" stop-color="#3b78ca"/></linearGradient></defs><rect x="3" y="5" width="26" height="25" rx="5" fill="url(#g-operations)"/><path d="M3 12h26" stroke="#fff" opacity=".7" stroke-width="2"/><path d="M10 3v5m12-5v5" stroke="#dceeff" stroke-width="3" stroke-linecap="round"/><g fill="#fff"><rect x="8" y="17" width="5" height="4" rx="1"/><rect x="19" y="17" width="5" height="4" rx="1"/><rect x="8" y="24" width="5" height="3" rx="1"/></g></svg>'},
@@ -391,7 +391,7 @@ $('am-colors-back').onclick=function(){$('am-colors').hidden=true;$('am-main').h
 buildSwatches('sw-p',BO_PRIMARY,'p');
 buildSwatches('sw-s',BO_SECONDARY,'s');
 $('so').onclick=signOut;
-$('textus-btn').addEventListener('click',function(){var b=$('textus-pop');b.hidden=!b.hidden;if(!b.hidden)b.innerHTML=textUs();});
+$('textus-btn').addEventListener('click',function(){location.href='/push-preview-v2/chat/';});
 document.addEventListener('click',function(e){var p=$('textus-pop');if(p&&!p.hidden&&!p.contains(e.target)&&e.target.id!=='textus-btn')p.hidden=true;});
 sb.auth.getSession().then(function(r){
  if(!r.data.session){location.replace('/push-preview-v2/');return;}

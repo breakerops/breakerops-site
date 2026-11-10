@@ -1,0 +1,163 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>BreakerOps | Matt</title><meta name="apple-mobile-web-app-title" content="BreakerOps"><meta name="robots" content="noindex,nofollow">
+<meta name="theme-color" content="#648ea9"><meta name="theme-color" media="(prefers-color-scheme: light)" content="#648ea9"><meta name="theme-color" media="(prefers-color-scheme: dark)" content="#22333c">
+<link rel="icon" href="../favicon.svg" type="image/svg+xml">
+<style>
+:root{--fg:#1e2c36;--muted:#485661;--border:rgba(20,45,62,.13);--card:rgba(255,255,255,.66);--accent:#246779;--accent-ink:#ffffff;--bad:#a63d22}
+html[data-theme=dark]{--fg:#e9eef0;--muted:#93a4ad;--border:rgba(233,238,240,.15);--card:rgba(30,44,52,.72);--accent:#7cc3d4;--accent-ink:#14252e;--bad:#ff9d8a}
+@media (prefers-color-scheme: dark){html:not([data-theme=light]){--fg:#e9eef0;--muted:#93a4ad;--border:rgba(233,238,240,.15);--card:rgba(30,44,52,.72);--accent:#7cc3d4;--accent-ink:#14252e;--bad:#ff9d8a}}
+html[data-theme=dark] .greeting,html[data-theme=dark] .hint{color:#e9eef0}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%}
+body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif;color:var(--fg);background:linear-gradient(168deg,#648ea9 0%,#b7cdd6 48%,#e6d9c7 100%) fixed;display:flex;flex-direction:column}
+html[data-theme=dark] body{background:linear-gradient(168deg,#14252e 0%,#1c3038 48%,#29291f 100%) fixed}
+@media (prefers-color-scheme: dark){html:not([data-theme=light]) body{background:linear-gradient(168deg,#14252e 0%,#1c3038 48%,#29291f 100%) fixed}}
+header{display:flex;align-items:center;gap:12px;padding:calc(14px + env(safe-area-inset-top,0px)) 18px 14px;color:#fff}
+header .back{color:#fff;text-decoration:none;font-size:17px;font-weight:600;opacity:.92}
+header .ava{width:46px;height:46px;border-radius:50%;object-fit:cover;background:#fff}
+header h1{font-size:21px;font-weight:700}
+main{flex:1;overflow-y:auto;padding:10px 20px 18px;display:flex;flex-direction:column}
+.wrap{position:relative;flex:1;display:flex;flex-direction:column}
+/* conversation: no bubbles, text on the gradient */
+.thread{display:flex;flex-direction:column;gap:14px;padding:6px 4px}
+.line{max-width:88%;font-size:19px;line-height:1.45;white-space:pre-wrap;word-break:break-word}
+.line.in{align-self:flex-end;text-align:right;color:var(--fg);font-weight:500}
+.line.out{align-self:flex-start;color:#3d4a53;font-family:Georgia,'Times New Roman',serif;font-size:20px}
+html[data-theme=dark] .line.out{color:#aab9c1}
+@media (prefers-color-scheme: dark){html:not([data-theme=light]) .line.out{color:#aab9c1}}
+.stamp{align-self:center;font-size:12px;color:#fff;opacity:.8;margin:10px 0 0}
+.err{align-self:center;font-size:14px;color:#fff;background:var(--bad);border-radius:10px;padding:8px 12px;margin-top:8px}
+/* calm empty state */
+.center-stage{margin:auto;display:flex;flex-direction:column;align-items:center;gap:18px;text-align:center}
+.center-stage img{width:88px;height:88px;border-radius:50%;object-fit:cover;background:#fff;box-shadow:0 8px 30px rgba(20,45,62,.18)}
+.greeting{font-size:26px;font-weight:600;color:#fff;text-shadow:0 1px 2px rgba(20,45,62,.12);line-height:1.3;max-width:16ch}
+.hint{position:absolute;left:0;right:0;bottom:calc(20px + env(safe-area-inset-bottom,0px));text-align:center;color:#fff;opacity:.85;font-size:15px;pointer-events:none}
+body.typing .hint,body.typing .center-stage{display:none}
+/* typing: big text above the keyboard */
+.typing-stage{display:none;position:fixed;left:0;right:0;bottom:0;z-index:3;padding:10px 24px calc(16px + env(safe-area-inset-bottom,0px));flex-direction:column;align-items:center;gap:16px;text-align:center}
+.typing-stage.on{display:flex}
+.typing-stage img{width:52px;height:52px;border-radius:50%;object-fit:cover;background:#fff}
+.typed{font-size:25px;line-height:1.45;color:var(--fg);font-weight:500;max-width:30ch;min-height:1.45em;max-height:38vh;overflow-y:auto;word-break:break-word}
+.typed .ph{color:var(--muted);font-weight:400}
+.caret{display:inline-block;width:3px;height:1.1em;background:var(--accent);vertical-align:-0.15em;margin-left:2px;animation:blink 1.05s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+/* the real input the keyboard attaches to; visually hidden */
+#msg{position:fixed;left:0;bottom:0;width:100%;height:44px;opacity:0;border:none;font-size:17px;pointer-events:none}
+</style></head>
+<body>
+<header>
+<a class="back" href="/push-preview-v2/calendar/">&lsaquo; Home</a>
+<img class="ava" src="../icons/matt.jpg" alt="">
+<h1>Matt</h1>
+</header>
+<main id="thread"></main>
+<div class="typing-stage" id="typingStage">
+<img src="../icons/matt.jpg" alt="">
+<div class="typed" id="typed" aria-live="polite"></div>
+</div>
+<input id="msg" type="text" autocomplete="off" maxlength="4000" enterkeyhint="send" aria-label="Message Matt">
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
+var thread=document.getElementById('thread'),msg=document.getElementById('msg'),typingStage=document.getElementById('typingStage'),typed=document.getElementById('typed');
+var session=null,businessId=null,lastSeen='',hasMessages=false,draft='',typing=false,sending=false;
+function esc(s){return String(s==null?'':s).replace(/[&<>"]/g,function(c){return{'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c];});}
+function fmtWhen(iso){var d=new Date(iso);return d.toLocaleDateString('en-US',{month:'short',day:'numeric'})+' '+d.toLocaleTimeString('en-US',{hour:'numeric',minute:'2-digit'});}
+function render(rows){
+ hasMessages=rows.length>0;
+ if(!rows.length){
+  thread.innerHTML='<div class="wrap"><div class="center-stage"><img src="../icons/matt.jpg" alt=""><div class="greeting">What can Matt help with?</div></div><div class="hint">Tap anywhere to type</div></div>';
+  return;
+ }
+ var html='<div class="wrap"><div class="thread">',prev=0;
+ rows.forEach(function(r){
+  var t=new Date(r.created_at).getTime();
+  if(!prev||t-prev>5*60*1000){html+='<div class="stamp">'+esc(fmtWhen(r.created_at))+'</div>';}
+  html+='<div class="line '+esc(r.direction)+'">'+esc(r.body)+'</div>';
+  prev=t;
+ });
+ html+='</div><div class="hint">Tap anywhere to type</div></div>';
+ thread.innerHTML=html;
+ thread.scrollTop=thread.scrollHeight;
+}
+async function load(){
+ var q=await sb.from('messages').select('id,direction,body,created_at').eq('business_id',businessId).order('created_at',{ascending:true}).limit(200);
+ if(q.error)return;
+ var rows=q.data||[];
+ if(rows.length)lastSeen=rows[rows.length-1].created_at;
+ render(rows);
+}
+function paintTyped(){
+ var v=msg.value;
+ typed.innerHTML=(v?esc(v):'<span class="ph">Type your message</span>')+'<span class="caret"></span>';
+}
+function startTyping(){
+ if(typing||!session||!businessId)return;
+ typing=true;
+ typingStage.classList.add('on');
+ document.body.classList.add('typing');
+ paintTyped();
+ msg.focus();
+}
+function stopTyping(){
+ typing=false;
+ typingStage.classList.remove('on');
+ document.body.classList.remove('typing');
+ msg.blur();
+}
+var blurAt=0;
+document.addEventListener('click',function(e){
+ if(e.target.closest('header'))return;
+ if(e.target.closest('.typing-stage')||e.target===msg)return;
+ if(typing){stopTyping();return;}
+ if(Date.now()-blurAt<350)return; // the tap that dismissed the keyboard
+ startTyping();
+});
+msg.addEventListener('input',paintTyped);
+msg.addEventListener('blur',function(){if(!sending){stopTyping();blurAt=Date.now();}});
+msg.addEventListener('keydown',async function(e){
+ if(e.key==='Escape'){stopTyping();return;}
+ if(e.key!=='Enter')return;
+ if(e.isComposing||e.keyCode===229)return; // let IME composition finish first
+ e.preventDefault();
+ var body=msg.value.trim();
+ if(!body||sending)return;
+ sending=true;
+ try{
+  var fresh=await sb.auth.getSession();
+  if(fresh.data.session)session=fresh.data.session;
+  var r=await fetch('https://euchkgnqxycqzgamucry.supabase.co/functions/v1/chat-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':'sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne','Authorization':'Bearer '+session.access_token},body:JSON.stringify({business_id:businessId,body:body})});
+  if(!r.ok)throw new Error('send failed');
+  msg.value='';draft='';
+  stopTyping();
+  await load();
+ }catch(_){
+  var err=document.createElement('div');err.className='err';err.textContent='Could not send. Try again in a moment.';
+  thread.appendChild(err);setTimeout(function(){err.remove();},4000);
+ }finally{sending=false;}
+});
+// Keep the typing stage parked just above the iOS keyboard.
+if(window.visualViewport){
+ var park=function(){
+  var gap=window.innerHeight-window.visualViewport.height-window.visualViewport.offsetTop;
+  typingStage.style.bottom=Math.max(0,gap)+'px';
+ };
+ window.visualViewport.addEventListener('resize',park);
+ window.visualViewport.addEventListener('scroll',park);
+ park();
+}
+sb.auth.getSession().then(async function(r){
+ session=r.data.session;
+ if(!session){location.replace('/push-preview-v2/');return;}
+ var b=await sb.from('businesses').select('id').limit(1);
+ businessId=b.data&&b.data[0]&&b.data[0].id;
+ await load();
+ // Instant delivery for new messages; slow poll as fallback.
+ try{
+  sb.channel('messages-'+businessId).on('postgres_changes',{event:'INSERT',schema:'public',table:'messages',filter:'business_id=eq.'+businessId},function(){load();}).subscribe();
+ }catch(_){}
+ setInterval(function(){if(!document.hidden)load();},60000);
+});
+</script>
+</body></html>
