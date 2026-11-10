@@ -1,6 +1,6 @@
-// push-subscribe: save the caller's web push subscription. Endpoints are per
-// device+site, not per user, so an endpoint that already exists under another
-// user is reassigned to the caller (upsert on the endpoint unique key).
+// push-subscribe: save the caller's web push subscription. Rows are keyed by
+// (user_id, endpoint) so multiple accounts can receive push on the same device;
+// re-subscribing as the same user on the same device refreshes the keys.
 import { createClient } from "jsr:@supabase/supabase-js@2";
 
 const cors = {
@@ -35,7 +35,7 @@ Deno.serve(async (req) => {
   if (error || !data.user) return reply({ error: "forbidden" }, 403);
   const { error: upErr } = await sb.from("push_subscriptions").upsert(
     { user_id: data.user.id, endpoint, p256dh, auth, user_agent: String(user_agent || "").slice(0, 512) },
-    { onConflict: "endpoint" }
+    { onConflict: "user_id,endpoint" }
   );
   if (upErr) return reply({ error: "save failed" }, 500);
   return reply({ ok: true });
