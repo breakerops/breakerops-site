@@ -71,6 +71,11 @@ label{display:block;text-align:left;font-size:14px;font-weight:600}
 .note{font-size:11px;color:#6b7d88;margin-top:22px}
 button[type=submit]{background:var(--accent);color:#fff}
 button.auth-alt{display:inline-block;width:auto;background:none;color:#485661;font-size:13px;font-weight:600;text-decoration:underline;padding:2px 0 4px;margin:0;box-shadow:none;min-height:0;border-radius:0}
+.confirm-email{text-align:center;padding:6px 0}
+.ce-title{font-size:19px;font-weight:800;margin:0 0 12px;color:#1e2c36}
+.ce-line{font-size:14px;line-height:1.55;color:#485661;margin:0 0 12px}
+.ce-line strong{color:#1e2c36}
+button.ce-go{background:var(--accent);color:#fff;margin-top:8px}
 
 .theme-pick{margin:14px 0 4px}
 .theme-label{font-size:12px;color:#485661;margin:0 0 8px;text-align:left}
@@ -118,6 +123,12 @@ button.sw.chosen{outline:2px solid var(--accent);outline-offset:2px}
 <button type="submit" id="auth-go">Create account</button>
 <button type="button" class="auth-alt" id="auth-alt">Already have a login? Sign in</button>
 </form>
+<section class="confirm-email" id="confirm-email" hidden>
+<h3 class="ce-title">Check your email to confirm</h3>
+<p class="ce-line">We sent a confirmation link to <strong id="ce-email"></strong>.</p>
+<p class="ce-line">Tap the link in that email to confirm your account. Then come back here and sign in to finish setup.</p>
+<button type="button" class="ce-go" id="ce-signin">I've confirmed, sign in</button>
+</section>
 <div class="status" id="status" role="status"></div>
 <div class="note">Preview only. Your current reminders are unchanged.</div>
 </div>
@@ -142,7 +153,7 @@ function step(n,title,copy){
  $('progress').innerHTML=[1,2,3,4].map(i=>'<span class="'+(i<n?'done':'')+'" aria-label="Step '+i+(i<n?' complete':'')+'"></span>').join('');
  $('step-title').textContent=n+' of 4 · '+title;
  $('step-copy').textContent=copy;
- for(const id of ['setup','signin','enable','test','confirmed','retry']) $(id).hidden=true;
+ for(const id of ['setup','signin','enable','test','confirmed','retry','confirm-email']) $(id).hidden=true;
  $('install-steps').hidden=true;
  $('setup').setAttribute('aria-expanded','false');
  say('');
@@ -234,6 +245,12 @@ function boSetMode(m,copy){
  $('signin').hidden=false;
 }
 $('auth-alt').onclick=()=>{boSetMode(boMode==='create'?'signin':'create')};
+function boShowConfirm(email){
+ step(2,'One more step','');
+ $('ce-email').textContent=email;
+ $('confirm-email').hidden=false;
+}
+$('ce-signin').onclick=()=>{boSetMode('signin');$('email').value=$('ce-email').textContent};
 $('signin').onsubmit=async(e)=>{
  e.preventDefault();
  const button=$('auth-go');button.disabled=true;
@@ -246,7 +263,7 @@ $('signin').onsubmit=async(e)=>{
    if(suErr){say(/already|registered|exists/i.test(suErr.message)?'That email already has a login - use the Sign in link below.':('Could not create account: '+suErr.message));return}
    if(!suData.session){
     if(suData.user&&suData.user.identities&&suData.user.identities.length===0){say('That email already has a login - use the Sign in link below.');return}
-    boSetMode('signin');say('Account created. One more step: confirm your email, then sign in below.');return}
+    boShowConfirm(email);return}
    try{const {error:rpcErr}=await sb.rpc('breakerops_provision');if(rpcErr){say('Account created, but workspace setup failed: '+rpcErr.message);return}}catch(re){say('Account created, but workspace setup failed. Try signing in again.');return}
    await refresh();
   }else{
