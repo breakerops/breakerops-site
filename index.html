@@ -122,7 +122,11 @@
     <div class="snm">Matt</div>
     <div class="stext">BreakerOps is Matt, a friendly assistant for electricians who run their own shop. He keeps track of jobs, quotes and invoices, and texts you when something needs doing.</div>
     <input id="inp2" type="tel" inputmode="tel" autocomplete="tel" placeholder="Cell number">
+    <input id="hp" type="text" tabindex="-1" autocomplete="off" aria-hidden="true" style="position:absolute;left:-9999px;top:-9999px">
+    <div class="shint" id="shint" style="display:none;color:#636366;font-size:12.5px;line-height:1.5;max-width:330px">We texted you a 6-digit code. Enter it below to finish signing up.</div>
+    <input id="inp3" type="tel" inputmode="numeric" autocomplete="one-time-code" placeholder="6-digit code" maxlength="6" style="display:none;text-align:center;letter-spacing:6px;font-size:20px">
     <button id="go">Sign up</button>
+    <div id="sback" style="display:none;color:#636366;font-size:12px;cursor:pointer;text-decoration:underline">Use a different number</div>
     <div class="sconsent" id="sconsent">By signing up with your number you agree to receive texts from BreakerOps. Reply STOP to opt out. <a href="/terms/">Terms</a> &middot; <a href="/sms-terms/">SMS Terms</a> &middot; <a href="/privacy/">Privacy</a></div>
     <div class="serr" id="serr"></div>
   </div>
@@ -155,7 +159,9 @@
       signup=document.getElementById('signup'),inp2=document.getElementById('inp2'),
       go=document.getElementById('go'),sconsent=document.getElementById('sconsent'),
       serr=document.getElementById('serr'),wl=document.getElementById('wl'),
-      wldone=document.getElementById('wldone');
+      wldone=document.getElementById('wldone'),hp=document.getElementById('hp'),
+      inp3=document.getElementById('inp3'),shint=document.getElementById('shint'),
+      sback=document.getElementById('sback');
   deck.addEventListener('scroll',function(){
     var w=deck.querySelector('.slide').offsetWidth+14;
     var i=Math.round(deck.scrollLeft/w);
@@ -176,27 +182,64 @@
     inp2.value=out;
     inp2.setSelectionRange(out.length,out.length);
   });
+  var stage='phone',curPhone='',
+      consentTxt='By signing up with your number you agree to receive texts from BreakerOps. Reply STOP to opt out.',
+      srcTxt='breakerops.com homepage waitlist';
+  var finish=function(){wl.style.display='flex';go.disabled=false};
+  var showErr=function(m){serr.textContent=m;serr.style.display='block';go.disabled=false};
+  var showCode=function(){
+    stage='code';inp2.style.display='none';serr.style.display='none';
+    shint.style.display='block';inp3.style.display='block';sback.style.display='block';
+    go.textContent='Verify';go.disabled=false;inp3.focus();
+  };
+  var showPhone=function(){
+    stage='phone';inp2.style.display='';inp3.style.display='none';
+    shint.style.display='none';sback.style.display='none';serr.style.display='none';
+    go.textContent='Sign up';go.disabled=false;inp2.focus();
+  };
+  sback.onclick=showPhone;
+  inp3.addEventListener('input',function(){
+    inp3.value=inp3.value.replace(/\D/g,'').slice(0,6);
+  });
   go.onclick=function(){
-    var digits=inp2.value.replace(/\D/g,'');
-    var e164=digits.length===10?'+1'+digits:(digits.length===11&&digits.charAt(0)==='1'?'+'+digits:null);
-    if(!e164){serr.textContent='Enter a valid 10-digit US cell number.';serr.style.display='block';inp2.focus();return}
-    serr.style.display='none';go.disabled=true;
-    var finish=function(){wl.style.display='flex';go.disabled=false};
-    if(localStorage.getItem('bo-wl-'+e164)){finish();return}
-    fetch('https://euchkgnqxycqzgamucry.supabase.co/functions/v1/signup',{
-      method:'POST',
-      headers:{'Content-Type':'application/json'},
-      body:JSON.stringify({phone:e164,consent:'By signing up with your number you agree to receive texts from BreakerOps. Reply STOP to opt out.',source:'breakerops.com homepage waitlist'})
-    }).then(function(r){
-      if(r.ok){localStorage.setItem('bo-wl-'+e164,'1');finish()}
-      else{serr.textContent='Something went wrong. Try again.';serr.style.display='block';go.disabled=false}
-    }).catch(function(){
-      serr.textContent='Could not reach the server. Check your connection and try again.';serr.style.display='block';go.disabled=false;
-    });
+    serr.style.display='none';
+    if(stage==='phone'){
+      var digits=inp2.value.replace(/\D/g,'');
+      var e164=digits.length===10?'+1'+digits:(digits.length===11&&digits.charAt(0)==='1'?'+'+digits:null);
+      if(!e164){serr.textContent='Enter a valid 10-digit US cell number.';serr.style.display='block';inp2.focus();return}
+      go.disabled=true;
+      if(localStorage.getItem('bo-wl-'+e164)){finish();return}
+      fetch('https://euchkgnqxycqzgamucry.supabase.co/functions/v1/signup',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'start',phone:e164,hp:hp.value,consent:consentTxt,source:srcTxt})
+      }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(res){
+        if(res.ok&&res.j&&res.j.v===2){curPhone=e164;showCode();return}
+        if(res.ok){localStorage.setItem('bo-wl-'+e164,'1');finish();return}
+        showErr((res.j&&res.j.error)||'Something went wrong. Try again.');
+      }).catch(function(){
+        showErr('Could not reach the server. Check your connection and try again.');
+      });
+    }else{
+      var code=inp3.value.replace(/\D/g,'');
+      if(code.length!==6){serr.textContent='Enter the 6-digit code.';serr.style.display='block';inp3.focus();return}
+      go.disabled=true;
+      fetch('https://euchkgnqxycqzgamucry.supabase.co/functions/v1/signup',{
+        method:'POST',
+        headers:{'Content-Type':'application/json'},
+        body:JSON.stringify({action:'verify',phone:curPhone,code:code,consent:consentTxt,source:srcTxt})
+      }).then(function(r){return r.json().then(function(j){return {ok:r.ok,j:j}})}).then(function(res){
+        if(res.ok){localStorage.setItem('bo-wl-'+curPhone,'1');finish();return}
+        showErr((res.j&&res.j.error)||'Something went wrong. Try again.');
+      }).catch(function(){
+        showErr('Could not reach the server. Check your connection and try again.');
+      });
+    }
   };
   wldone.onclick=function(){
     wl.style.display='none';signup.style.display='none';
     pill.style.display='';dots.style.display='';deck.style.display='';
+    inp3.value='';showPhone();
   };
   var menu=document.getElementById('menu');
   document.getElementById('menuicon').onclick=function(){menu.style.display='flex'};
