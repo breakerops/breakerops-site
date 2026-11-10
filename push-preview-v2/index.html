@@ -348,14 +348,12 @@ $('enable').onclick=async()=>{
   const reg=await navigator.serviceWorker.ready;
   const sub=(await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID_PUB)});
   const k=sub.toJSON().keys;
-  const existing=await sb.from('push_subscriptions').select('id').eq('endpoint',sub.endpoint);
-  if(existing.error) throw existing.error;
-  if(!existing.data.length){
-   const {error}=await sb.from('push_subscriptions').insert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent});
-   if(error) throw error;
-  }
+  const cur=await sb.auth.getSession();session=cur.data.session;
+  if(!session){boSetMode('signin','Your session needs to be refreshed.');return}
+  const r=await fetch(SUPA_URL+'/functions/v1/push-subscribe',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent})});
+  if(!r.ok){const j=await r.json().catch(()=>({}));throw new Error(j.error||('HTTP '+r.status))}
   readyForTest();
- }catch(e){say('Could not save notification permission: '+e.message);$('retry').hidden=false}
+ }catch(e){console.error('push-subscribe failed',e);say('Could not save notification permission. Try again in a moment.');$('retry').hidden=false}
  finally{$('enable').disabled=false}
 };
 $('confirmed').addEventListener('click',e=>{if($('confirmed').classList.contains('disabled'))e.preventDefault()});
