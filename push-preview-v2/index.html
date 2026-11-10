@@ -1,11 +1,33 @@
 <!DOCTYPE html>
 <html lang="en"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width, initial-scale=1">
 <title>BreakerOps | Push preview</title><meta name="apple-mobile-web-app-title" content="Calendar"><meta name="robots" content="noindex,nofollow">
+<script>var boColors={p:'#246779',s:'#648ea9'};
+function boIsHex(v){return typeof v==='string'&&/^#[0-9a-f]{6}$/i.test(v)}
+function boHx(h){h=h.replace('#','');var n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255]}
+function boHex2(r,g,b){return'#'+[r,g,b].map(function(v){v=Math.round(Math.max(0,Math.min(255,v)));return(v<16?'0':'')+v.toString(16)}).join('')}
+function boMix(a,b,t){var A=boHx(a),B=boHx(b);return boHex2(A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t,A[2]+(B[2]-A[2])*t)}
+function boLum(h){var c=boHx(h).map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2]}
+function boCr(a,b){var x=boLum(a),y=boLum(b);return(Math.max(x,y)+0.05)/(Math.min(x,y)+0.05)}
+function boDarken(c,bg,min){var a=c,i=0;while(boCr(a,bg)<min&&i<20){a=boMix(a,'#000000',0.09);i++}return a}
+function boLighten(c,bg,min){var a=c,i=0;while(boCr(a,bg)<min&&i<20){a=boMix(a,'#ffffff',0.09);i++}return a}
+function applyBoColors(p,s,sync){try{
+ if(!boIsHex(p))p='#246779';if(!boIsHex(s))s='#648ea9';
+ boColors={p:p,s:s};var r=document.documentElement.style;
+ var v={'--accent-l':boDarken(p,'#ffffff',4.5),'--accent-dk':boLighten(p,'#1e2c36',4.5),'--accent-text-l':boDarken(p,'#f6f8f9',4.5),'--accent-text-dk':boLighten(p,'#22333c',4.5),
+ '--glow':'radial-gradient(ellipse at 92% 0%,'+boMix(s,'#ffffff',0.5)+' 0,transparent 52%)',
+ '--grad':'linear-gradient(168deg,'+boMix(s,'#000000',0.06)+' 0%,'+boMix(s,'#ffffff',0.42)+' 48%,'+boMix(s,'#ffffff',0.62)+' 100%)'};
+ for(var k in v)r.setProperty(k,v[k]);
+ localStorage.setItem('bo-colors',JSON.stringify({p:p,s:s}));
+ if(sync){var pp=document.getElementById('pick-p'),ps=document.getElementById('pick-s');if(pp)pp.value=p;if(ps)ps.value=s}
+}catch(e){}}
+try{localStorage.removeItem("bo-theme-vars")}catch(e){}
+try{var c=JSON.parse(localStorage.getItem("bo-colors")||"null");if(c)applyBoColors(c.p,c.s)}catch(e){}</script>
 <link rel="manifest" href="/push-preview-v2/manifest.webmanifest?v=2">
 <link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png?v=4">
-<meta name="theme-color" content="#171717">
+<meta name="theme-color" content="#648ea9">
 <style>
-body{margin:0;background:radial-gradient(ellipse at 92% 0%,#a9d3e3 0,transparent 52%),linear-gradient(168deg,#648ea9 0%,#b7cdd6 48%,#e6d9c7 100%);background-attachment:fixed;color:#1e2c36;font-family:-apple-system,'SF Pro Text','Inter','Helvetica Neue',Arial,sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased}
+:root{--accent-l:#246779;--accent-text-l:#246779;--accent:var(--accent-l);--accent-text:var(--accent-text-l);--glow:radial-gradient(ellipse at 92% 0%,#a9d3e3 0,transparent 52%);--grad:linear-gradient(168deg,#648ea9 0%,#b7cdd6 48%,#e6d9c7 100%)}
+body{margin:0;background:var(--glow),var(--grad);background-attachment:fixed;color:#1e2c36;font-family:-apple-system,'SF Pro Text','Inter','Helvetica Neue',Arial,sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased}
 
 .card{max-width:340px;padding:30px 24px;text-align:center;background:rgba(255,255,255,.62);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid #ffffff90;border-radius:26px;box-shadow:0 8px 30px #25394714;margin:16px}
 
@@ -27,22 +49,30 @@ button{display:block;width:100%;padding:14px;border-radius:14px;border:0;font:in
 .steps p{font-size:13px;margin:12px 0 0;color:#485661}
 .share-icon{width:18px;height:21px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7}
 .menu-icon{width:24px;height:24px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
-.enable{background:#246779;color:#fff}
+.enable{background:var(--accent);color:#fff}
 
 .test{background:rgba(255,255,255,.55);color:#1e2c36;border:1px solid #ffffff90}
 .progress{display:flex;gap:5px;margin:24px 0 16px}
 .progress span{flex:1;height:4px;border-radius:4px;background:rgba(30,44,54,.14)}
-.progress .done{background:#246779}
+.progress .done{background:var(--accent)}
 .step-title{font-size:21px;margin:0 0 10px}
 button:disabled{opacity:.5}
-a{color:#246779}
+a{color:var(--accent-text)}
 
 .status{font-size:13px;color:#485661;min-height:18px;margin-top:12px}
 
 input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background:rgba(255,255,255,.7);color:#1e2c36;border:1px solid rgba(20,45,62,.2);border-radius:12px;font:inherit}
 label{display:block;text-align:left;font-size:14px;font-weight:600}
 .note{font-size:11px;color:#6b7d88;margin-top:22px}
-button[type=submit]{background:#246779;color:#fff}
+button[type=submit]{background:var(--accent);color:#fff}
+
+.theme-pick{margin:14px 0 4px}
+.theme-label{font-size:12px;color:#485661;margin:0 0 8px;text-align:left}
+.color-rows{display:flex;gap:26px;justify-content:center}
+.color-rows label{display:flex;flex-direction:column;align-items:center;gap:7px;font-size:13px;color:#485661;font-weight:600}
+.color-rows input[type=color]{width:52px;height:52px;border:2px solid #ffffff90;border-radius:14px;padding:0;background:none;cursor:pointer;box-shadow:0 3px 10px #25394722}
+.color-rows input[type=color]::-webkit-color-swatch-wrapper{padding:3px}
+.color-rows input[type=color]::-webkit-color-swatch{border:none;border-radius:9px}
 </style></head><body>
 <div class="card">
 <h1>Breaker<span>Ops</span></h1>
@@ -68,10 +98,17 @@ button[type=submit]{background:#246779;color:#fff}
 <form id="signin" hidden>
 <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
 <label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
+<div class="theme-pick" id="theme-pick">
+<p class="theme-label">Pick your colors - you can change them later</p>
+<div class="color-rows">
+<label>Primary<input type="color" id="pick-p" value="#246779"></label>
+<label>Secondary<input type="color" id="pick-s" value="#648ea9"></label>
+</div>
+</div>
 <button type="submit">Sign in to preview</button>
 </form>
 <div class="status" id="status" role="status"></div>
-<div class="note">Preview finish2. Your current reminders are unchanged.</div>
+<div class="note">Preview only. Your current reminders are unchanged.</div>
 </div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -113,6 +150,7 @@ async function refresh(){
  const verified=await sb.auth.getUser();user=verified.data.user;
  if(user){try{if(localStorage.getItem(completionKey(user.id))==='yes'){openCalendar();return}}catch(_){}}
  if(!user){step(2,'Sign in again','Your session needs to be refreshed.');$('signin').hidden=false;return}
+ if(user.user_metadata&&user.user_metadata.colors&&user.user_metadata.colors.p)applyBoColors(user.user_metadata.colors.p,user.user_metadata.colors.s||'#648ea9',true);
  step(3,'Allow notifications','Tap Enable notifications, then Allow on the iPhone prompt. This lets BreakerOps send this preview test.');
  $('enable').hidden=false;
  if(!('Notification' in window) || !('PushManager' in window)){
@@ -144,13 +182,37 @@ $('setup').onclick=()=>{
  $('setup').setAttribute('aria-expanded',String(open));
  if(open) $('install-steps').scrollIntoView({behavior:'smooth',block:'start'});
 };
+var boColors={p:'#246779',s:'#648ea9'};
+function boIsHex(v){return typeof v==='string'&&/^#[0-9a-f]{6}$/i.test(v)}
+function boHx(h){h=h.replace('#','');var n=parseInt(h,16);return[(n>>16)&255,(n>>8)&255,n&255]}
+function boHex2(r,g,b){return'#'+[r,g,b].map(function(v){v=Math.round(Math.max(0,Math.min(255,v)));return(v<16?'0':'')+v.toString(16)}).join('')}
+function boMix(a,b,t){var A=boHx(a),B=boHx(b);return boHex2(A[0]+(B[0]-A[0])*t,A[1]+(B[1]-A[1])*t,A[2]+(B[2]-A[2])*t)}
+function boLum(h){var c=boHx(h).map(function(v){v/=255;return v<=0.03928?v/12.92:Math.pow((v+0.055)/1.055,2.4)});return 0.2126*c[0]+0.7152*c[1]+0.0722*c[2]}
+function boCr(a,b){var x=boLum(a),y=boLum(b);return(Math.max(x,y)+0.05)/(Math.min(x,y)+0.05)}
+function boDarken(c,bg,min){var a=c,i=0;while(boCr(a,bg)<min&&i<20){a=boMix(a,'#000000',0.09);i++}return a}
+function boLighten(c,bg,min){var a=c,i=0;while(boCr(a,bg)<min&&i<20){a=boMix(a,'#ffffff',0.09);i++}return a}
+function applyBoColors(p,s,sync){try{
+ if(!boIsHex(p))p='#246779';if(!boIsHex(s))s='#648ea9';
+ boColors={p:p,s:s};var r=document.documentElement.style;
+ var v={'--accent-l':boDarken(p,'#ffffff',4.5),'--accent-dk':boLighten(p,'#1e2c36',4.5),'--accent-text-l':boDarken(p,'#f6f8f9',4.5),'--accent-text-dk':boLighten(p,'#22333c',4.5),
+ '--glow':'radial-gradient(ellipse at 92% 0%,'+boMix(s,'#ffffff',0.5)+' 0,transparent 52%)',
+ '--grad':'linear-gradient(168deg,'+boMix(s,'#000000',0.06)+' 0%,'+boMix(s,'#ffffff',0.42)+' 48%,'+boMix(s,'#ffffff',0.62)+' 100%)'};
+ for(var k in v)r.setProperty(k,v[k]);
+ localStorage.setItem('bo-colors',JSON.stringify({p:p,s:s}));
+ if(sync){var pp=document.getElementById('pick-p'),ps=document.getElementById('pick-s');if(pp)pp.value=p;if(ps)ps.value=s}
+}catch(e){}}
+var boTouched=false;
+$('pick-p').oninput=e=>{boTouched=true;applyBoColors(e.target.value,$('pick-s').value)};
+$('pick-s').oninput=e=>{boTouched=true;applyBoColors($('pick-p').value,e.target.value)};
 $('signin').onsubmit=async(e)=>{
  e.preventDefault();say('Signing in...');
  const button=$('signin').querySelector('button');button.disabled=true;
  try{
-  const {error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+  const {data:siData,error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
   $('password').value='';
   if(error){say('Sign-in failed. Check your email and password.');return}
+  try{var um=(siData&&siData.user&&siData.user.user_metadata)||{};
+  if(boTouched||!um.colors){var merged={};for(var k in um)merged[k]=um[k];merged.colors={p:boColors.p,s:boColors.s};await sb.auth.updateUser({data:merged})}}catch(e){}
   await refresh();
  }catch(e){say('Sign-in failed. Please try again.')}finally{button.disabled=false}
 };
