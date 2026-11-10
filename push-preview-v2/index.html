@@ -73,12 +73,16 @@ button[type=submit]{background:var(--accent);color:#fff}
 .alert{display:flex;align-items:flex-start;justify-content:space-between;gap:10px;background:#fbe9e6;border:1px solid #e3b3ab;color:#83301f;border-radius:12px;padding:12px 14px;margin:8px 0 12px;font-size:14px;line-height:1.5;text-align:left}
 .alert[hidden]{display:none}
 .alert-x{background:none;border:0;color:#83301f;font-size:18px;line-height:1.2;cursor:pointer;padding:0 2px;margin:0;box-shadow:none;min-height:0;width:auto}
+.alert-link{background:none;border:0;color:#83301f;font-size:13px;font-weight:700;text-decoration:underline;cursor:pointer;padding:2px 0;margin:0;box-shadow:none;min-height:0;width:auto;white-space:nowrap}
+a.disabled{opacity:.5;pointer-events:none}
 button.auth-alt{display:inline-block;width:auto;background:none;color:#485661;font-size:13px;font-weight:600;text-decoration:underline;padding:2px 0 4px;margin:0;box-shadow:none;min-height:0;border-radius:0}
 .confirm-email{text-align:center;padding:6px 0}
 .ce-title{font-size:19px;font-weight:800;margin:0 0 12px;color:#1e2c36}
 .ce-line{font-size:14px;line-height:1.55;color:#485661;margin:0 0 12px}
 .ce-line strong{color:#1e2c36}
 button.ce-go{background:var(--accent);color:#fff;margin-top:8px}
+.ce-row{display:flex;justify-content:center;gap:18px;margin-top:10px}
+button.ce-alt{background:none;border:0;color:#485661;font-size:13px;font-weight:600;text-decoration:underline;padding:2px 0 4px;margin:0;box-shadow:none;min-height:0;width:auto;border-radius:0;cursor:pointer}
 
 .bar-top,.bar-bottom{position:fixed;left:0;width:100%;height:11px;z-index:9999;pointer-events:none}
 .bar-top{top:0;background:var(--bar-top)}
@@ -103,20 +107,21 @@ button.ce-go{background:var(--accent);color:#fff;margin-top:8px}
 </section>
 <button class="enable" id="enable" hidden>Enable notifications</button>
 <button class="test" id="test" hidden>Send test notification</button>
-<a class="setup calendar-link" id="confirmed" href="/push-preview-v2/calendar/" hidden>I saw it - open my calendar</a>
+<a class="setup calendar-link" id="confirmed" href="/push-preview-v2/calendar/" hidden>I saw it, open my calendar</a>
 <button class="setup" id="retry" hidden>Check again</button>
 <form id="signin" hidden>
 <label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
 <label for="password">Password</label><input id="password" type="password" autocomplete="new-password" minlength="6" required>
-<div class="alert" id="auth-alert" role="alert" hidden><span id="auth-alert-msg"></span><button type="button" class="alert-x" id="auth-alert-x" aria-label="Dismiss message">&times;</button></div>
+<div class="alert" id="auth-alert" role="alert" hidden><span id="auth-alert-msg"></span><button type="button" class="alert-link" id="auth-alert-action" hidden>Sign in instead</button><button type="button" class="alert-x" id="auth-alert-x" aria-label="Dismiss message">&times;</button></div>
 <button type="submit" id="auth-go">Create account</button>
 <button type="button" class="auth-alt" id="auth-alt">Already have a login? Sign in</button>
 </form>
 <section class="confirm-email" id="confirm-email" hidden>
 <h3 class="ce-title">Check your email to confirm</h3>
 <p class="ce-line">We sent a confirmation link to <strong id="ce-email"></strong>.</p>
-<p class="ce-line">Tap the link in that email to confirm your account. Then come back here and sign in to finish setup.</p>
+<p class="ce-line">Tap the link in that email to confirm your account. Then come back to the BreakerOps icon on your Home Screen and sign in.</p>
 <button type="button" class="ce-go" id="ce-signin">I've confirmed, sign in</button>
+<div class="ce-row"><button type="button" class="ce-alt" id="ce-resend">Resend email</button><button type="button" class="ce-alt" id="ce-startover">Wrong email? Start over</button></div>
 </section>
 <div class="status" id="status" role="status"></div>
 <div class="note">Preview only. Your current reminders are unchanged.</div>
@@ -131,8 +136,9 @@ const $=id=>document.getElementById(id);
 function u8(s){const p='='.repeat((4-s.length%4)%4);const b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
 function say(m){$('status').textContent=m}
 function boAlert(m){$('auth-alert-msg').textContent=m;$('auth-alert').hidden=false}
-function boAlertClear(){$('auth-alert').hidden=true;$('auth-alert-msg').textContent=''}
+function boAlertClear(){$('auth-alert').hidden=true;$('auth-alert-msg').textContent='';$('auth-alert-action').hidden=true}
 $('auth-alert-x').onclick=boAlertClear;
+$('auth-alert-action').onclick=()=>{boAlertClear();boSetMode('signin');};
 $('email').addEventListener('input',boAlertClear);
 $('password').addEventListener('input',boAlertClear);
 const isInstalled=()=>window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
@@ -191,9 +197,10 @@ async function refresh(){
  }catch(e){say('Setup check failed: '+e.message);$('retry').hidden=false}
 }
 function readyForTest(){
- step(null,'You\u2019re all set','Send one clearly labeled test alert. Your iPhone decides when to show it. Tap the banner to open your calendar.');
+ step(null,'Send a test alert','Send one clearly labeled test alert. Your iPhone decides when to show it. Then tap I saw it below to open your calendar.');
  $('test').hidden=false;
  $('confirmed').hidden=false;
+ $('confirmed').classList.add('disabled');$('confirmed').setAttribute('aria-disabled','true');
 }
 $('setup').onclick=()=>{
  const open=$('install-steps').hidden;
@@ -222,18 +229,25 @@ function applyBoColors(p,s,sync){try{
  if(sync&&window.boSyncSwatches)window.boSyncSwatches(p,s)
 }catch(e){}}
 let boMode='create';
-function boSetMode(m,copy){
+function boSetMode(m,copy,inSetup){
  boMode=m;
  if(m==='create'){
   step(2,'Create your account','Pick an email and a password for your BreakerOps login. Next: turn on notifications.');
   $('password').setAttribute('autocomplete','new-password');
   $('auth-go').textContent='Create account';
   $('auth-alt').textContent='Already have a login? Sign in';
+  $('auth-alt').hidden=false;
  }else{
-  step(null,'Sign in',copy||'Welcome back. Sign in with your BreakerOps login. Home Screen apps may ask you to sign in separately from Safari.');
+  if(inSetup){
+   step(2,'Sign in',copy||'Your email is confirmed. Sign in to continue.');
+   $('auth-alt').hidden=true;
+  }else{
+   step(null,'Sign in',copy||'Welcome back. Sign in with your BreakerOps login. Home Screen apps may ask you to sign in separately from Safari.');
+   $('auth-alt').textContent='New here? Create an account';
+   $('auth-alt').hidden=false;
+  }
   $('password').setAttribute('autocomplete','current-password');
   $('auth-go').textContent='Sign in';
-  $('auth-alt').textContent='New here? Create an account';
  }
  $('signin').hidden=false;
 }
@@ -243,11 +257,14 @@ function boShowConfirm(email){
  $('ce-email').textContent=email;
  $('confirm-email').hidden=false;
 }
-$('ce-signin').onclick=()=>{boSetMode('signin');$('email').value=$('ce-email').textContent};
+$('ce-signin').onclick=()=>{boSetMode('signin',null,true);$('email').value=$('ce-email').textContent};
+$('ce-resend').onclick=async()=>{const b=$('ce-resend');b.disabled=true;try{const r=await sb.auth.resend({type:'signup',email:$('ce-email').textContent});say(r&&r.error?('Could not resend: '+r.error.message):'Sent again. Check your inbox.')}catch(e){say('Could not resend. Try again in a moment.')}finally{b.disabled=false}};
+$('ce-startover').onclick=()=>{boSetMode('create')};
 $('signin').onsubmit=async(e)=>{
  e.preventDefault();
  boAlertClear();
  const button=$('auth-go');button.disabled=true;
+ const fail=m=>{say('');boAlert(m);$('password').focus();};
  try{
   const email=$('email').value.trim(),pw=$('password').value;
   if(boMode==='create'){
@@ -255,25 +272,24 @@ $('signin').onsubmit=async(e)=>{
    const {data:suData,error:suErr}=await sb.auth.signUp({email:email,password:pw});
    $('password').value='';
    if(suErr){
-    say('');
-    if(/already|registered|exists/i.test(suErr.message))boAlert('That email already has a login. Tap "Already have a login? Sign in" below.');
-    else if(/password/i.test(suErr.message)&&/weak|short|at least|length|characters/i.test(suErr.message))boAlert('That password is too weak. Use at least 6 characters.');
-    else boAlert('Could not create account: '+suErr.message);
+    if(/already|registered|exists/i.test(suErr.message)){fail('That email already has a login.');$('auth-alert-action').hidden=false}
+    else if(/password/i.test(suErr.message))fail(suErr.message+(/\.$/.test(suErr.message)?'':'.'));
+    else fail('Could not create account: '+suErr.message);
     return}
    if(!suData.session){
-    if(suData.user&&suData.user.identities&&suData.user.identities.length===0){say('');boAlert('That email already has a login. Tap "Already have a login? Sign in" below.');return}
+    if(suData.user&&suData.user.identities&&suData.user.identities.length===0){fail('That email already has a login.');$('auth-alert-action').hidden=false;return}
     boShowConfirm(email);return}
-   try{const {error:rpcErr}=await sb.rpc('breakerops_provision');if(rpcErr){say('');boAlert('Account created, but workspace setup failed: '+rpcErr.message);return}}catch(re){say('');boAlert('Account created, but workspace setup failed. Try signing in again.');return}
+   try{const {error:rpcErr}=await sb.rpc('breakerops_provision');if(rpcErr){fail('Account created, but workspace setup failed: '+rpcErr.message);return}}catch(re){fail('Account created, but workspace setup failed. Try signing in again.');return}
    await refresh();
   }else{
    say('Signing in...');
    const {data:siData,error}=await sb.auth.signInWithPassword({email:email,password:pw});
    $('password').value='';
-   if(error){say('');boAlert('That email and password don\u2019t match. Check them and try again.');return}
+   if(error){fail(/confirm/i.test(error.message)?'Confirm your email first. Check your inbox for the link.':'That email and password don\u2019t match. Check them and try again.');return}
    try{await sb.rpc('breakerops_provision')}catch(re){}
    await refresh();
   }
- }catch(e){say('');boAlert(/fetch|network|failed/i.test(String(e&&e.message))?'No connection. Check your internet and try again.':(boMode==='create'?'Could not create account. Please try again.':'Sign-in failed. Please try again.'))}finally{button.disabled=false}
+ }catch(e){fail(/fetch|network|failed/i.test(String(e&&e.message))?'No connection. Check your internet and try again.':(boMode==='create'?'Could not create account. Please try again.':'Sign-in failed. Please try again.'))}finally{button.disabled=false}
 };
 $('enable').onclick=async()=>{
  $('enable').disabled=true;
@@ -305,6 +321,9 @@ $('test').onclick=async()=>{
   if(!r.ok) throw new Error(j.error||String(r.status));
   if(j.sent>0){
    say('The push service accepted the test for '+j.sent+' device(s). Delivery is not confirmed yet. Check your Lock Screen or Notification Center.');
+   $('step-title').textContent='You\u2019re all set';
+   $('step-copy').textContent='Watch for the test alert. Tap the banner to open your calendar.';
+   $('confirmed').classList.remove('disabled');$('confirmed').removeAttribute('aria-disabled');
    $('confirmed').hidden=false;
   }else{say('No test was accepted. '+j.failed+' device(s) failed. Try Check again to review permission.');$('retry').hidden=false}
  }catch(e){say('Test failed: '+e.message);$('retry').hidden=false}
