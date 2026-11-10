@@ -131,6 +131,7 @@ main{flex:1;min-height:0;padding-bottom:calc(28px + env(safe-area-inset-bottom,0
 .sw.chosen{outline:2px solid var(--accent-text);outline-offset:2px}
 .sw-status{font-size:13px;color:var(--muted);min-height:20px;margin:8px 0 0}
 .signout{font:inherit;font-size:16px;background:none;color:var(--muted);border:0;padding:12px 2px;min-height:44px;cursor:pointer}
+.am-back{font:inherit;font-size:15px;font-weight:600;background:none;color:var(--accent-text);border:0;padding:2px 2px 8px;min-height:32px;cursor:pointer}
 h1{font-size:28px;letter-spacing:-.02em;margin:8px 0 12px;font-weight:800;color:var(--fg)}
 h2{font-size:20px;margin:26px 0 8px;color:var(--fg)}
 label{font-size:15px;font-weight:600;display:block;margin:10px 0 4px}
@@ -170,11 +171,16 @@ input,select{width:100%;font:inherit;padding:12px;border:1px solid var(--border)
 <footer class="site-foot">Powered by <b>BreakerOps</b></footer>
 <button class="gear acct-fab" id="gear" type="button" aria-label="Account and settings" aria-haspopup="dialog" aria-expanded="false" hidden><svg width="22" height="22" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true"><line x1="4" y1="8" x2="20" y2="8"/><circle cx="9" cy="8" r="2.2" fill="var(--card)"/><line x1="4" y1="16" x2="20" y2="16"/><circle cx="15" cy="16" r="2.2" fill="var(--card)"/></svg></button>
 <div class="acct-menu" id="acct-menu" hidden><div class="am-panel" role="dialog" aria-label="Settings">
+<div id="am-main">
+<div class="set-group"><button class="settings-row" type="button" id="am-colors-open">Colors<span aria-hidden="true">&rsaquo;</span></button><a class="settings-row" href="#logs">Information logs<span aria-hidden="true">&rsaquo;</span></a><a class="settings-row" href="#users">Add users<span aria-hidden="true">&rsaquo;</span></a><a class="settings-row" href="#profile">Profile<span aria-hidden="true">&rsaquo;</span></a><a class="settings-row" href="#integrations">Integrations<span aria-hidden="true">&rsaquo;</span></a><a class="settings-row" href="#thoughts">Thoughts<span aria-hidden="true">&rsaquo;</span></a></div>
+<button class="signout" type="button" id="so">Sign out</button>
+</div>
+<div id="am-colors" hidden>
+<button class="am-back" type="button" id="am-colors-back">&lsaquo; Settings</button>
 <div class="swatch-sec"><h3>Primary</h3><div class="sws" id="sw-p"></div></div>
 <div class="swatch-sec"><h3>Secondary</h3><div class="sws" id="sw-s"></div></div>
 <p class="sw-status" id="sw-status" role="status"></p>
-<div class="set-group"><a class="settings-row" href="#logs">Information logs<span aria-hidden="true">&rsaquo;</span></a><a class="settings-row" href="#users">Add users<span aria-hidden="true">&rsaquo;</span></a><a class="settings-row" href="#profile">Profile<span aria-hidden="true">&rsaquo;</span></a><a class="settings-row" href="#integrations">Integrations<span aria-hidden="true">&rsaquo;</span></a><a class="settings-row" href="#thoughts">Thoughts<span aria-hidden="true">&rsaquo;</span></a></div>
-<button class="signout" type="button" id="so">Sign out</button>
+</div>
 </div></div></div>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
@@ -376,10 +382,12 @@ function signOut(){try{localStorage.removeItem('bo-colors')}catch(e){}sb.auth.si
 function refresh(){return sb.from('calendar_items').select('id,title,due_date,due_time,notes,completed').order('due_date').then(function(q){items=q.data||[];route();});}
 document.addEventListener('visibilitychange',function(){if(!document.hidden&&user)refresh();});
 setInterval(function(){if(!document.hidden&&user)refresh();},60000);
-function openMenu(){var m=$('acct-menu');m.hidden=false;$('gear').setAttribute('aria-expanded','true');}
+function openMenu(){$('am-colors').hidden=true;$('am-main').hidden=false;var m=$('acct-menu');m.hidden=false;$('gear').setAttribute('aria-expanded','true');}
 function closeMenu(){var m=$('acct-menu');m.hidden=true;$('gear').setAttribute('aria-expanded','false');}
 $('gear').onclick=function(){var m=$('acct-menu');if(m.hidden)openMenu();else closeMenu();};
 $('acct-menu').addEventListener('click',function(e){if(e.target===this)closeMenu();});
+$('am-colors-open').onclick=function(){$('am-main').hidden=true;$('am-colors').hidden=false;};
+$('am-colors-back').onclick=function(){$('am-colors').hidden=true;$('am-main').hidden=false;};
 buildSwatches('sw-p',BO_PRIMARY,'p');
 buildSwatches('sw-s',BO_SECONDARY,'s');
 $('so').onclick=signOut;
