@@ -17,10 +17,19 @@ Deno.serve(async (req) => {
   if (!token) return reply({ error: "auth required" }, 401);
   let payload;
   try { payload = await req.json(); } catch { return reply({error:"invalid request"},400); }
-  const { user_id } = payload;
+  const { user_id, url: requestedUrl } = payload;
   const title = "BreakerOps test";
   const body = "If this banner showed up, push notifications work.";
-  const url = "https://www.breakerops.com/push-preview/calendar/";
+  // Default tap-through stays the v1 preview; v2 passes its own calendar URL.
+  let url = "https://www.breakerops.com/push-preview/calendar/";
+  if (typeof requestedUrl === "string") {
+    try {
+      const u = new URL(requestedUrl);
+      const okHost = u.hostname === "www.breakerops.com" || u.hostname === "breakerops.com";
+      const okPath = u.pathname.startsWith("/push-preview/") || u.pathname.startsWith("/push-preview-v2/");
+      if (u.protocol === "https:" && u.port === "" && u.username === "" && u.password === "" && okHost && okPath) url = u.origin + u.pathname + u.search;
+    } catch { /* keep default */ }
+  }
   const sb = createClient(Deno.env.get("SUPABASE_URL")!, Deno.env.get("SUPABASE_SERVICE_ROLE_KEY")!);
   const { data, error } = await sb.auth.getUser(token);
   if (error || !data.user || data.user.id !== user_id) {
