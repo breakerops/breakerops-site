@@ -13,7 +13,7 @@ html[data-theme=dark]{--fg:#e9eef0;--muted:#93a4ad;--border:rgba(233,238,240,.15
 html[data-theme=dark] .greeting,html[data-theme=dark] .hint{color:#e9eef0}
 *{box-sizing:border-box;margin:0;padding:0}
 html{height:100%;background:#648ea9}html[data-theme=dark]{background:#14252e}
-html,body{min-height:0}body{height:100vh;height:100dvh;overflow:hidden}
+html,body{min-height:0;overscroll-behavior:none}body{height:100vh;height:100dvh;overflow:hidden}
 body{font-family:-apple-system,BlinkMacSystemFont,'SF Pro Text','Segoe UI',Roboto,sans-serif;color:var(--fg);background:linear-gradient(168deg,#648ea9 0%,#b7cdd6 48%,#e6d9c7 100%) fixed;display:flex;flex-direction:column}
 html[data-theme=dark] body{background:linear-gradient(168deg,#14252e 0%,#1c3038 48%,#29291f 100%) fixed}
 @media (prefers-color-scheme: dark){html:not([data-theme=light]) body{background:linear-gradient(168deg,#14252e 0%,#1c3038 48%,#29291f 100%) fixed}}
@@ -39,8 +39,8 @@ html[data-theme=dark] .line.out{color:#aab9c1}
 .hint{position:absolute;left:0;right:0;bottom:calc(20px + env(safe-area-inset-bottom,0px));text-align:center;color:#fff;opacity:.85;font-size:15px;pointer-events:none}
 body.typing .hint,body.typing .center-stage{opacity:0;pointer-events:none}
 /* typing: big text above the keyboard */
-.typing-stage{display:flex;visibility:hidden;opacity:0;transform:translateY(10px);transition:opacity .16s ease,transform .16s ease,visibility .16s;position:fixed;left:0;right:0;bottom:0;z-index:3;padding:10px 24px calc(16px + env(safe-area-inset-bottom,0px));flex-direction:column;align-items:center;gap:16px;text-align:center}
-.typing-stage.on{visibility:visible;opacity:1;transform:translateY(0)}
+.typing-stage{display:flex;visibility:hidden;opacity:0;transition:opacity .16s ease,visibility .16s;position:fixed;left:0;right:0;bottom:0;z-index:3;padding:10px 24px calc(16px + env(safe-area-inset-bottom,0px));flex-direction:column;align-items:center;gap:16px;text-align:center}
+.typing-stage.on{visibility:visible;opacity:1}
 .typing-stage img{width:52px;height:52px;border-radius:50%;object-fit:cover;background:#fff}
 .typed{font-size:25px;line-height:1.45;color:var(--fg);font-weight:500;max-width:30ch;min-height:1.45em;max-height:38vh;overflow-y:auto;word-break:break-word}
 .typed .ph{color:var(--muted);font-weight:400}
@@ -50,9 +50,17 @@ body.typing .hint,body.typing .center-stage{opacity:0;pointer-events:none}
 #msg{position:fixed;left:0;bottom:0;width:100%;height:44px;opacity:0;border:none;font-size:17px;pointer-events:none}
 
 html[data-theme=dark]{--shell-top:#14252e}
-header h1{flex:1}
-#send{border:0;border-radius:20px;padding:10px 15px;font-family:inherit;font-weight:600;font-size:16px;background:var(--accent);color:var(--accent-ink);opacity:0;visibility:hidden;transition:opacity .16s;min-height:44px}
-body.typing #send{opacity:1;visibility:visible}body.typing #send:disabled{opacity:.45}
+header h1{flex:0}
+header{display:grid;grid-template-columns:70px 1fr 70px;gap:0}
+header .back{grid-column:1;grid-row:1}
+.header-person{grid-column:2;grid-row:1;display:flex;align-items:center;justify-content:center;gap:10px;white-space:nowrap}
+#send{flex:0 0 44px;width:44px;height:44px;border:0;border-radius:50%;display:grid;place-items:center;background:#087eff;color:white;pointer-events:auto;opacity:1;transition:opacity .16s;touch-action:manipulation}
+#send svg{width:27px;height:27px;fill:none;stroke:currentColor;stroke-width:2.8;stroke-linecap:round;stroke-linejoin:round}
+body.typing #send:disabled{opacity:.4}
+.compose-row{display:flex;align-items:flex-end;gap:12px;width:min(100%,540px);padding:8px 10px 8px 17px;border:0;border-radius:0;background:transparent;pointer-events:auto}
+.compose-row .typed{flex:1;min-width:0;text-align:left;max-width:none;padding-bottom:4px}
+header{padding-top:calc(52px + env(safe-area-inset-top,0px));padding-bottom:20px;isolation:isolate}
+header .ava{box-shadow:none;filter:none;mask-image:none;transform:translateZ(0)}
 #connection{flex-shrink:0;text-align:center;padding:5px 18px;font-size:13px;color:var(--fg);min-height:26px}
 #connection:empty{min-height:0;padding:0}#retryLoad{align-self:center;padding:8px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--fg)}
 #sendError{position:relative;z-index:5;padding:10px 18px;background:var(--bad);color:white;font-size:14px}
@@ -63,14 +71,13 @@ body.typing #send{opacity:1;visibility:visible}body.typing #send:disabled{opacit
 <body>
 <header>
 <a class="back" href="/push-preview-v2/calendar/">&lsaquo; Home</a>
-<img class="ava" src="../icons/matt.jpg" alt="">
-<h1>Matt</h1><button id="send" type="button" disabled aria-label="Send message">Send</button>
+<div class="header-person"><img class="ava" src="../icons/matt.jpg" alt=""><h1>Matt</h1></div>
 </header>
 <div id="connection" role="status" aria-live="polite">Connecting...</div><button id="retryLoad" type="button" hidden>Try again</button><main id="thread" aria-label="Conversation with Matt"></main><p id="sendError" role="alert" hidden></p>
 <div class="typing-stage" id="typingStage">
-<div class="typed" id="typed" aria-live="polite"></div>
+<div class="compose-row"><div class="typed" id="typed" aria-live="polite"></div><button id="send" type="button" disabled aria-label="Send message"><svg viewBox="0 0 24 24" aria-hidden="true"><path d="M12 19V5M6 11l6-6 6 6"/></svg></button></div>
 </div>
-<input id="msg" type="text" autocomplete="off" maxlength="4000" enterkeyhint="send" aria-label="Message Matt">
+<input id="msg" type="text" autocomplete="off" maxlength="4000" enterkeyhint="enter" aria-label="Message Matt">
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script>
 var sb=supabase.createClient('https://euchkgnqxycqzgamucry.supabase.co','sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne');
@@ -126,15 +133,15 @@ msg.addEventListener('blur',function(){if(!sending){stopTyping();blurAt=Date.now
 sendButton.addEventListener('pointerdown',function(e){e.preventDefault();});
 sendButton.addEventListener('click',sendMessage);
 async function sendMessage(){
- var body=msg.value.trim();if(!body||sending)return;sending=true;paintTyped();sendError.hidden=true;sendButton.textContent='Sending...';
+ var body=msg.value.trim();if(!body||sending)return;sending=true;paintTyped();sendError.hidden=true;sendButton.setAttribute('aria-label','Sending message');sendButton.setAttribute('aria-busy','true');
  try{
   var fresh=await sb.auth.getSession();if(fresh.error||!fresh.data.session)throw new Error('session');session=fresh.data.session;
   var r=await fetch('https://euchkgnqxycqzgamucry.supabase.co/functions/v1/chat-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':'sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne','Authorization':'Bearer '+session.access_token},body:JSON.stringify({business_id:businessId,body:body})});
   if(!r.ok)throw new Error('send failed');msg.value='';stopTyping();await load();
  }catch(e){sendError.textContent=e.message==='session'?'Your session expired. Your draft is kept. Sign in again from Home.':'Could not confirm the send. Your draft is kept. Check the thread before trying again.';sendError.hidden=false;}
- finally{sending=false;sendButton.textContent='Send';paintTyped();}
+ finally{sending=false;sendButton.setAttribute('aria-label','Send message');sendButton.removeAttribute('aria-busy');paintTyped();}
 }
-msg.addEventListener('keydown',function(e){if(e.key==='Escape'){stopTyping();return;}if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){e.preventDefault();sendMessage();}});
+msg.addEventListener('keydown',function(e){if(e.key==='Escape'){stopTyping();return;}if(e.key==='Enter'&&!e.isComposing&&e.keyCode!==229){e.preventDefault();}});
 if(window.visualViewport){var park=function(){var v=window.visualViewport,gap=window.innerHeight-v.height-v.offsetTop;typingStage.style.bottom=Math.max(0,gap)+'px';typingStage.style.maxHeight=Math.max(80,v.height-140)+'px';};window.visualViewport.addEventListener('resize',park);window.visualViewport.addEventListener('scroll',park);park();}
 function subscribe(){
  if(!businessId||!navigator.onLine)return;
