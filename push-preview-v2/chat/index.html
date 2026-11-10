@@ -52,11 +52,11 @@ body.typing .hint,body.typing .center-stage{opacity:0;pointer-events:none}
 html[data-theme=dark]{--shell-top:#14252e}
 header h1{flex:1}
 #send{border:0;border-radius:20px;padding:10px 15px;font-family:inherit;font-weight:600;font-size:16px;background:var(--accent);color:var(--accent-ink);opacity:0;visibility:hidden;transition:opacity .16s;min-height:44px}
-body.typing #send{opacity:1;visibility:visible}#send:disabled{opacity:.45}
+body.typing #send{opacity:1;visibility:visible}body.typing #send:disabled{opacity:.45}
 #connection{flex-shrink:0;text-align:center;padding:5px 18px;font-size:13px;color:var(--fg);min-height:26px}
 #connection:empty{min-height:0;padding:0}#retryLoad{align-self:center;padding:8px 16px;border:1px solid var(--border);border-radius:12px;background:var(--card);color:var(--fg)}
 #sendError{position:relative;z-index:5;padding:10px 18px;background:var(--bad);color:white;font-size:14px}
-.hint,.center-stage{transition:opacity .16s}.typing-stage{pointer-events:none}.typed{pointer-events:auto}.line{animation:arrive .18s ease-out}
+.hint,.center-stage{transition:opacity .16s}.typing-stage{pointer-events:none}.typed{pointer-events:auto}.line.new{animation:arrive .18s ease-out}
 @keyframes arrive{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
 @media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
 </style></head>
@@ -88,12 +88,14 @@ function render(rows){
  var wrap=thread.querySelector('.wrap'),list=thread.querySelector('.thread');
  if(!list){thread.innerHTML='<div class="wrap"><div class="thread"></div><div class="hint">Tap anywhere to type</div></div>';wrap=thread.querySelector('.wrap');list=thread.querySelector('.thread');}
  var existing={};list.querySelectorAll('[data-message]').forEach(function(n){existing[n.dataset.message]=n;});
- var keep={},prev=0;rows.forEach(function(r){
+ var keep={},prev=0,cursor=list.firstElementChild;rows.forEach(function(r){
   var t=new Date(r.created_at).getTime(),stamp=!prev||t-prev>5*60*1000;prev=t;
-  var item=existing[r.id];if(!item){item=document.createElement('div');item.dataset.message=r.id;item.style.display='contents';}
+  var item=existing[r.id],isNew=!item;if(!item){item=document.createElement('div');item.dataset.message=r.id;item.style.display='contents';}
   var html=(stamp?'<div class="stamp">'+esc(fmtWhen(r.created_at))+'</div>':'')+'<div class="line '+(r.direction==='out'?'out':'in')+'">'+esc(r.body)+'</div>';
   if(item.innerHTML!==html)item.innerHTML=html;
-  list.appendChild(item);keep[r.id]=true;
+  if(isNew){var line=item.querySelector('.line');line.classList.add('new');line.addEventListener('animationend',function(){this.classList.remove('new');},{once:true});}
+  if(item!==cursor)list.insertBefore(item,cursor);
+  cursor=item.nextElementSibling;keep[r.id]=true;
  });Object.keys(existing).forEach(function(id){if(!keep[id])existing[id].remove();});
  if(firstLoad||nearBottom)thread.scrollTop=thread.scrollHeight;else thread.scrollTop=oldTop;firstLoad=false;
 }
