@@ -1,0 +1,23 @@
+{
+  "name": "Calendar",
+  "short_name": "Calendar",
+  "id": "/push-preview-v2/",
+  "start_url": "/push-preview-v2/",
+  "scope": "/push-preview-v2/",
+  "display": "standalone",
+  "background_color": "#b7cdd6",
+  "theme_color": "#648ea9",
+  "icons": [
+    {
+      "src": "/assets/img/calendar-icon-256.png",
+      "sizes": "256x256",
+      "type": "image/png",
+      "purpose": "any"
+    },
+    {
+      "src": "/assets/img/apple-touch-icon.png",
+      "sizes": "180x180",
+      "type": "image/png"
+    }
+  ]
+}

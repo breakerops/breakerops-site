@@ -1,0 +1,204 @@
+<!DOCTYPE html>
+<html lang="en"><head><meta charset="utf-8"><meta http-equiv="Cache-Control" content="no-cache, no-store, must-revalidate"><meta http-equiv="Pragma" content="no-cache"><meta http-equiv="Expires" content="0"><meta name="viewport" content="width=device-width, initial-scale=1">
+<title>BreakerOps | Push preview</title><meta name="apple-mobile-web-app-title" content="Calendar"><meta name="robots" content="noindex,nofollow">
+<link rel="manifest" href="/push-preview-v2/manifest.webmanifest?v=2">
+<link rel="apple-touch-icon" href="/assets/img/apple-touch-icon.png?v=4">
+<meta name="theme-color" content="#171717">
+<style>
+body{margin:0;background:radial-gradient(ellipse at 92% 0%,#a9d3e3 0,transparent 52%),linear-gradient(168deg,#648ea9 0%,#b7cdd6 48%,#e6d9c7 100%);background-attachment:fixed;color:#1e2c36;font-family:-apple-system,'SF Pro Text','Inter','Helvetica Neue',Arial,sans-serif;min-height:100dvh;display:flex;align-items:center;justify-content:center;-webkit-font-smoothing:antialiased}
+
+.card{max-width:340px;padding:30px 24px;text-align:center;background:rgba(255,255,255,.62);backdrop-filter:blur(24px);-webkit-backdrop-filter:blur(24px);border:1px solid #ffffff90;border-radius:26px;box-shadow:0 8px 30px #25394714;margin:16px}
+
+h1{font-size:26px;letter-spacing:-0.02em;margin:0 0 6px;font-weight:800}
+
+h1 span{font-weight:400}
+
+p{color:#485661;font-size:14px;line-height:1.5;margin:0 0 20px}
+
+[hidden]{display:none!important}
+button{display:block;width:100%;padding:14px;border-radius:14px;border:0;font:inherit;font-size:16px;font-weight:600;cursor:pointer;margin:10px 0}
+
+.calendar-link{box-sizing:border-box;display:block;padding:14px;border-radius:14px;font-size:16px;font-weight:600;margin:10px 0;text-decoration:none}
+.setup{background:rgba(255,255,255,.55);color:#1e2c36;border:1px solid #ffffff90}
+.steps{text-align:left;border:1px solid #ffffff90;background:rgba(255,255,255,.5);border-radius:16px;padding:16px;margin:14px 0}
+.steps h2{font-size:17px;margin:0 0 12px}
+.steps ol{padding-left:22px;margin:0}
+.steps li{font-size:14px;line-height:1.55;margin:10px 0}
+.steps p{font-size:13px;margin:12px 0 0;color:#485661}
+.share-icon{width:18px;height:21px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:1.7}
+.menu-icon{width:24px;height:24px;vertical-align:middle;stroke:currentColor;fill:none;stroke-width:2;stroke-linecap:round}
+.enable{background:#246779;color:#fff}
+
+.test{background:rgba(255,255,255,.55);color:#1e2c36;border:1px solid #ffffff90}
+.progress{display:flex;gap:5px;margin:24px 0 16px}
+.progress span{flex:1;height:4px;border-radius:4px;background:rgba(30,44,54,.14)}
+.progress .done{background:#246779}
+.step-title{font-size:21px;margin:0 0 10px}
+button:disabled{opacity:.5}
+a{color:#246779}
+
+.status{font-size:13px;color:#485661;min-height:18px;margin-top:12px}
+
+input{box-sizing:border-box;width:100%;padding:12px;margin:6px 0 12px;background:rgba(255,255,255,.7);color:#1e2c36;border:1px solid rgba(20,45,62,.2);border-radius:12px;font:inherit}
+label{display:block;text-align:left;font-size:14px;font-weight:600}
+.note{font-size:11px;color:#6b7d88;margin-top:22px}
+button[type=submit]{background:#246779;color:#fff}
+</style></head><body>
+<div class="card">
+<h1>Breaker<span>Ops</span></h1>
+<p id="sub">A short setup, one step at a time.</p>
+<div id="progress" class="progress" aria-label="Setup progress"></div>
+<h2 id="step-title" class="step-title">Checking your setup...</h2>
+<p id="step-copy"></p>
+<button class="setup" id="setup" hidden aria-expanded="false" aria-controls="install-steps">Show me where to tap</button>
+<section class="steps" id="install-steps" hidden aria-label="Home Screen setup">
+<h2>Add Calendar to your Home Screen</h2>
+<ol>
+<li>In Safari, tap the menu <svg class="menu-icon" viewBox="0 0 24 24" aria-label="browser menu symbol"><rect x="7.5" y="2.5" width="9" height="7.5" rx="1.8"/><rect x="16.5" y="5" width="2.6" height="2.6" rx="1"/><line x1="4.5" y1="14" x2="19.5" y2="14"/><line x1="4.5" y1="18.5" x2="19.5" y2="18.5"/></svg> beside <strong>breakerops.com</strong> in the address bar, then <strong>Share</strong> <svg class="share-icon" viewBox="0 0 24 28" aria-label="square with upward arrow"><path d="M5 12H2v14h20V12h-3M12 19V2M6 8l6-6 6 6"/></svg>. If you already see the Share symbol in your toolbar, tap it directly.</li>
+<li>Scroll down the Share menu and tap <strong>Add to Home Screen</strong>. If missing, look under <strong>Edit Actions</strong>.</li>
+<li>If shown, leave <strong>Open as Web App</strong> on, then tap <strong>Add</strong>.</li>
+<li>Open the new <strong>Calendar</strong> icon from your Home Screen. Sign in there, then tap <strong>Enable notifications</strong>.</li>
+</ol>
+<p>This button shows the steps. iPhone requires the actual Home Screen action in the browser menu. If you are inside another app's browser, open this page in Safari first.</p>
+</section>
+<button class="enable" id="enable" hidden>Enable notifications</button>
+<button class="test" id="test" hidden>Send test notification</button>
+<a class="setup calendar-link" id="confirmed" href="/push-preview-v2/calendar/" hidden>I saw it - open my calendar</a>
+<button class="setup" id="retry" hidden>Check again</button>
+<form id="signin" hidden>
+<label for="email">Email</label><input id="email" type="email" autocomplete="username" required>
+<label for="password">Password</label><input id="password" type="password" autocomplete="current-password" required>
+<button type="submit">Sign in to preview</button>
+</form>
+<div class="status" id="status" role="status"></div>
+<div class="note">Preview finish2. Your current reminders are unchanged.</div>
+</div>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script>
+const SUPA_URL='https://euchkgnqxycqzgamucry.supabase.co';
+const ANON='sb_publishable_wDN_uKDfrxffFmqxKKOZXw_bMIlhHne';
+const VAPID_PUB='BNquoQu1tKe8OBfFAKSVHCZd0G5ySodsRJHdmvAAbPHITvkLBlWKnkAQ54oxgTPQuPRX4uP0fTO_xyQTkERUarI';
+const sb=supabase.createClient(SUPA_URL,ANON);
+const $=id=>document.getElementById(id);
+function u8(s){const p='='.repeat((4-s.length%4)%4);const b=atob((s+p).replace(/-/g,'+').replace(/_/g,'/'));return Uint8Array.from(b,c=>c.charCodeAt(0))}
+function say(m){$('status').textContent=m}
+const isInstalled=()=>window.matchMedia('(display-mode: standalone)').matches || navigator.standalone===true;
+let session=null,user=null,bannerConfirmed=false;
+const completionKey=id=>'breakerops.pushPreview.completed.v1.'+id;
+function openCalendar(){
+ say('Banner confirmed by you. Opening your calendar...');
+ $('confirmed').hidden=true;$('test').hidden=true;
+ location.replace('/push-preview-v2/calendar/');
+}
+function step(n,title,copy){
+ $('progress').innerHTML=[1,2,3,4].map(i=>'<span class="'+(i<n?'done':'')+'" aria-label="Step '+i+(i<n?' complete':'')+'"></span>').join('');
+ $('step-title').textContent=n+' of 4 · '+title;
+ $('step-copy').textContent=copy;
+ for(const id of ['setup','signin','enable','test','confirmed','retry']) $(id).hidden=true;
+ $('install-steps').hidden=true;
+ $('setup').setAttribute('aria-expanded','false');
+ say('');
+}
+async function refresh(){
+ if(!isInstalled()){
+  step(1,'Add to your Home Screen','One iPhone step first. Use the browser menu to add this page, then open the new Calendar icon. The next step appears there.');
+  $('setup').hidden=false;
+  return;
+ }
+ const {data,error}=await sb.auth.getSession(); session=data.session;
+ if(error || !session){
+  step(2,'Sign in','Use your existing BreakerOps login. Home Screen apps may ask you to sign in separately from Safari.');
+  $('signin').hidden=false; return;
+ }
+ const verified=await sb.auth.getUser();user=verified.data.user;
+ if(user){try{if(localStorage.getItem(completionKey(user.id))==='yes'){openCalendar();return}}catch(_){}}
+ if(!user){step(2,'Sign in again','Your session needs to be refreshed.');$('signin').hidden=false;return}
+ step(3,'Allow notifications','Tap Enable notifications, then Allow on the iPhone prompt. This lets BreakerOps send this preview test.');
+ $('enable').hidden=false;
+ if(!('Notification' in window) || !('PushManager' in window)){
+  say('Notifications are not available here. Open the Home Screen icon on a supported iPhone.');$('enable').hidden=true;return;
+ }
+ try{
+  const reg=await navigator.serviceWorker.register('/push-preview-v2/sw.js',{updateViaCache:'none'});
+  reg.update().catch(()=>{});
+  const sub=await reg.pushManager.getSubscription();
+  if(Notification.permission==='granted' && sub){
+   const saved=await sb.from('push_subscriptions').select('id').eq('endpoint',sub.endpoint);
+   if(saved.error) throw saved.error;
+   if(saved.data.length){readyForTest();return}
+  }
+  if(Notification.permission==='denied'){
+   say('Notifications are off. In iPhone Settings, find notifications for this Home Screen app and allow them, then return here.');
+   $('enable').hidden=true;$('retry').hidden=false;
+  }
+ }catch(e){say('Setup check failed: '+e.message);$('retry').hidden=false}
+}
+function readyForTest(){
+ step(4,'Try your first alert','Send one clearly labeled test. Your iPhone decides when to show it. Tap the banner to open your calendar.');
+ $('test').hidden=false;
+ $('confirmed').hidden=false;
+}
+$('setup').onclick=()=>{
+ const open=$('install-steps').hidden;
+ $('install-steps').hidden=!open;
+ $('setup').setAttribute('aria-expanded',String(open));
+ if(open) $('install-steps').scrollIntoView({behavior:'smooth',block:'start'});
+};
+$('signin').onsubmit=async(e)=>{
+ e.preventDefault();say('Signing in...');
+ const button=$('signin').querySelector('button');button.disabled=true;
+ try{
+  const {error}=await sb.auth.signInWithPassword({email:$('email').value.trim(),password:$('password').value});
+  $('password').value='';
+  if(error){say('Sign-in failed. Check your email and password.');return}
+  await refresh();
+ }catch(e){say('Sign-in failed. Please try again.')}finally{button.disabled=false}
+};
+$('enable').onclick=async()=>{
+ $('enable').disabled=true;
+ try{
+  if(!isInstalled() || !user){await refresh();return}
+  const perm=await Notification.requestPermission();
+  if(perm!=='granted'){await refresh();return}
+  say('Saving notification permission...');
+  const reg=await navigator.serviceWorker.ready;
+  const sub=(await reg.pushManager.getSubscription()) || await reg.pushManager.subscribe({userVisibleOnly:true,applicationServerKey:u8(VAPID_PUB)});
+  const k=sub.toJSON().keys;
+  const existing=await sb.from('push_subscriptions').select('id').eq('endpoint',sub.endpoint);
+  if(existing.error) throw existing.error;
+  if(!existing.data.length){
+   const {error}=await sb.from('push_subscriptions').insert({user_id:user.id,endpoint:sub.endpoint,p256dh:k.p256dh,auth:k.auth,user_agent:navigator.userAgent});
+   if(error) throw error;
+  }
+  readyForTest();
+ }catch(e){say('Could not save notification permission: '+e.message);$('retry').hidden=false}
+ finally{$('enable').disabled=false}
+};
+$('test').onclick=async()=>{
+ $('test').disabled=true; say('Sending your test...');
+ try{
+  const current=await sb.auth.getSession();session=current.data.session;
+  if(!session){await refresh();return}
+  const r=await fetch(SUPA_URL+'/functions/v1/push-send',{method:'POST',headers:{'Content-Type':'application/json','apikey':ANON,'Authorization':'Bearer '+session.access_token},body:JSON.stringify({user_id:user.id})});
+  const j=await r.json();
+  if(!r.ok) throw new Error(j.error||String(r.status));
+  if(j.sent>0){
+   say('The push service accepted the test for '+j.sent+' device(s). Delivery is not confirmed yet. Check your Lock Screen or Notification Center.');
+   $('confirmed').hidden=false;
+  }else{say('No test was accepted. '+j.failed+' device(s) failed. Try Check again to review permission.');$('retry').hidden=false}
+ }catch(e){say('Test failed: '+e.message);$('retry').hidden=false}
+ finally{$('test').disabled=false}
+};
+$('confirmed').onclick=()=>{
+ bannerConfirmed=true;
+ if(user){try{localStorage.setItem(completionKey(user.id),'yes')}catch(_){}}
+ openCalendar();
+};
+$('retry').onclick=()=>refresh();
+window.addEventListener('pageshow',()=>refresh());
+if('serviceWorker' in navigator){
+ navigator.serviceWorker.getRegistration('/push-preview-v2/').then(reg=>{if(reg)reg.update().catch(()=>{})});
+}
+
+refresh();
+</script></body></html>
