@@ -15,6 +15,8 @@ self.addEventListener('push', (e) => {
   try { d = e.data ? e.data.json() : {}; } catch (_) { d = {}; }
   e.waitUntil(self.registration.showNotification(d.title || 'BreakerOps', {
     body: d.body || '',
+    tag: typeof d.tag === 'string' && /^chat-[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i.test(d.tag) ? d.tag : undefined,
+    renotify: false,
     icon: '/assets/img/brand-icon-v2.png',
     badge: '/assets/img/brand-icon-v2.png',
     data: { url: d.url || 'https://www.breakerops.com/push-preview-v2/calendar/' }
